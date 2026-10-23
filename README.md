@@ -42,7 +42,11 @@ docker compose up --build -d
 
 ## GitHub
 
-Проект лежит в приватном репозитории [HackathonAutumn2026](https://github.com/andreichernov201/HackathonAutumn2026). В нём есть `.gitignore` и проверка GitHub Actions. При push в `main` или открытии pull request она ставит зависимости, собирает приложение и проверяет сборку Docker-образа.
+Проект лежит в приватном репозитории [HackathonAutumn2026](https://github.com/andreichernov201/HackathonAutumn2026). В нём есть `.gitignore` и проверка GitHub Actions. При push в `main` или `dev`, а также при pull request в эти ветки она собирает приложение и Docker-образ.
+
+`main` — готовая версия. `dev` — общая ветка разработки. Для новой задачи создаю ветку от `dev`, затем открываю pull request обратно в `dev`. Готовые изменения переношу из `dev` в `main` через pull request.
+
+Коммиты называю коротко: `добавлено: ...`, `фикс: ...`, `изменено: ...`.
 
 ## Что подключать дальше
 
