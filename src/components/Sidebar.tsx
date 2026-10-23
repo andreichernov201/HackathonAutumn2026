@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, CircleHelp, MessageSquareText, Plus, X } from 'lucide-react'
+import { ChevronDown, MessageSquareText, Plus, X } from 'lucide-react'
 import { navigation, type Section } from '../app/navigation'
 import type { ChatSession } from '../features/assistant/types'
 import { formatTime } from '../shared/format'
@@ -52,11 +52,10 @@ export function Sidebar({ open, section, sessions, activeSessionId, onClose, onN
         </div>
 
         <div className="sidebar-footer">
-          <div className="sidebar-help"><CircleHelp size={16} /><span>Локальный прототип</span></div>
           <button className="profile-button" onClick={() => setProfileOpen((value) => !value)} aria-expanded={profileOpen}>
-            <span className="avatar">ИА</span><span className="profile-copy"><strong>Иванов А. А.</strong><small>Рабочее пространство</small></span><ChevronDown size={16} className={profileOpen ? 'rotated' : ''} />
+            <span className="avatar">П</span><span className="profile-copy"><strong>Профиль</strong><small>Рабочее пространство</small></span><ChevronDown size={16} className={profileOpen ? 'rotated' : ''} />
           </button>
-          {profileOpen && <div className="profile-popover" role="status"><strong>Демо-профиль</strong><span>Авторизация и настройки будут подключены позже.</span></div>}
+          {profileOpen && <div className="profile-popover" role="status"><strong>Профиль</strong><span>Вход и настройки сейчас недоступны.</span></div>}
         </div>
       </aside>
     </>

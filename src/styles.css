@@ -45,7 +45,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
 .history-copy small { color: #8a97aa; font-size: 10px; }
 .history-empty { margin: 7px 8px; font-size: 11px; color: #a0acbc; }
 .sidebar-footer { border-top: 1px solid #e5ebf4; padding-top: 12px; position: relative; }
-.sidebar-help { color: #8995a8; display: flex; align-items: center; gap: 8px; padding: 3px 6px 12px; font-size: 11px; }
 .profile-button { width: 100%; border: 0; background: transparent; display: flex; align-items: center; gap: 9px; text-align: left; padding: 5px 4px; border-radius: 9px; }
 .profile-button:hover { background: #eaf2ff; }
 .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; background: linear-gradient(145deg, #d7e8ff, #a6ccff); color: #2563eb; font-size: 12px; font-weight: 750; }
@@ -63,8 +62,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
 .topbar-title { display: grid; gap: 2px; }
 .topbar-title .eyebrow { color: #9aa6b8; font-size: 10px; font-weight: 600; letter-spacing: .03em; }
 .topbar-title strong { font-size: 17px; line-height: 1.2; font-weight: 720; letter-spacing: -.25px; }
-.prototype-pill { display: inline-flex; align-items: center; gap: 7px; color: #667b9a; background: #f2f6fc; border: 1px solid #e7edf5; border-radius: 100px; padding: 6px 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-.prototype-pill span { background: #21b27a; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 3px #dff7ee; }
 .top-new { height: 32px; padding: 0 13px; display: flex; align-items: center; gap: 7px; border: 1px solid #e4eaf2; border-radius: 8px; background: #fff; color: #334155; font-size: 11px; font-weight: 590; box-shadow: 0 2px 5px #1b345208; white-space: nowrap; }
 .top-new:hover { border-color: #bad2ff; color: #2563eb; }
 .icon-button { border: 0; background: transparent; color: #3d4b65; display: grid; place-items: center; padding: 5px; border-radius: 6px; }
@@ -109,8 +106,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
 .attached-file { background: #f2f6fb; color: #526581; }
 .attached-file span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .attached-file small { opacity: .7; font-size: 10px; white-space: nowrap; }
-.composer-caption { display: flex; justify-content: center; align-items: center; gap: 5px; color: #a0acbc; font-size: 10px; margin: 10px 0 0; text-align: center; line-height: 1.4; }
-.composer-caption svg { flex: none; color: #52af8c; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 
 .conversation-area { flex: 1; min-height: 0; overflow-y: auto; padding: 35px 28px 15px; }
@@ -138,7 +133,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
 .section-area { flex: 1; min-height: 0; display: grid; place-items: center; padding: 32px; }
 .section-empty { width: min(100%, 450px); text-align: center; }
 .section-icon { display: grid; place-items: center; color: #2563eb; width: 60px; height: 60px; margin: 0 auto 21px; background: #eaf2ff; border: 1px solid #d8e8ff; border-radius: 17px; }
-.section-overline { font-size: 10px; font-weight: 700; letter-spacing: .12em; color: #4f85db; text-transform: uppercase; }
 .section-empty h1 { margin: 8px 0 9px; font-size: 31px; letter-spacing: -.04em; }
 .section-empty p { color: #7c8ba1; font-size: 13px; line-height: 1.6; margin: 0 auto 23px; }
 .section-empty button { display: inline-flex; align-items: center; gap: 9px; border: 1px solid #ccdcf6; border-radius: 8px; background: #fff; color: #2563eb; font-size: 12px; font-weight: 650; padding: 10px 13px; }
@@ -169,7 +163,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
   .topbar-title strong { font-size: 15px; }
   .topbar-title .eyebrow { display: none; }
   .top-new { display: none; }
-  .prototype-pill { padding: 5px 8px; font-size: 10px; }
   .welcome-area { padding: 42px 20px 20px; align-items: flex-start; }
   .welcome-inner { margin: 0 auto; }
   .hero-symbol { width: 50px; height: 50px; margin-bottom: 15px; }
@@ -182,7 +175,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
   .quick-copy small { font-size: 10px; }
   .quick-arrow { display: none; }
   .composer-wrap { padding: 10px 16px 15px; }
-  .composer-caption { font-size: 9px; }
   .conversation-area { padding: 23px 16px 10px; }
 }
 

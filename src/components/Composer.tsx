@@ -1,5 +1,5 @@
 import { useRef, type RefObject, type KeyboardEvent } from 'react'
-import { Check, FileText, Paperclip, Send, Sparkles, X } from 'lucide-react'
+import { FileText, Paperclip, Send, Sparkles, X } from 'lucide-react'
 import { scenarios } from '../features/assistant/scenarios'
 import type { Scenario } from '../features/assistant/types'
 import { formatFileSize } from '../shared/format'
@@ -37,6 +37,5 @@ export function Composer({ inputRef, draft, file, scenario, submitting, onDraft,
         <button className="send-button" type="submit" aria-label="Отправить запрос" title="Отправить запрос" disabled={(!draft.trim() && !file) || submitting}><Send size={19} fill="currentColor" strokeWidth={1.6} /></button>
       </div>
     </form>
-    <p className="composer-caption"><Check size={13} />Локальный прототип: ответы и загрузка файлов будут доступны после подключения сервисов</p>
   </div>
 }

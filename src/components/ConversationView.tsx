@@ -13,7 +13,7 @@ export function ConversationView({ session }: { session: ChatSession }) {
 
   return <div className="conversation-area">
     <div className="conversation-inner">
-      <div className="conversation-heading"><div className="small-spark"><Sparkles size={17} /></div><div><h1>{session.title}</h1><p>Локальный диалог</p></div></div>
+      <div className="conversation-heading"><div className="small-spark"><Sparkles size={17} /></div><div><h1>{session.title}</h1><p>Диалог</p></div></div>
       <div className="messages">
         {session.messages.map((message) => (
           <div className={`message-row ${message.role === 'assistant' ? 'assistant' : ''}`} key={message.id}>
@@ -26,7 +26,7 @@ export function ConversationView({ session }: { session: ChatSession }) {
           </div>
         ))}
       </div>
-      {!session.messages.some((message) => message.role === 'assistant') && <div className="integration-note"><span className="note-icon"><CircleHelp size={18} /></span><div><strong>Ответы пока не подключены</strong><p>Запрос сохранён в этом браузере. Нормативный поиск, обработка файлов и генерация документов появятся после интеграции сервисов.</p></div></div>}
+      {!session.messages.some((message) => message.role === 'assistant') && <div className="integration-note"><span className="note-icon"><CircleHelp size={18} /></span><div><strong>Ответ недоступен</strong><p>Запрос сохранён только в этом браузере. Обработка файла и поиск по нормативной базе сейчас недоступны.</p></div></div>}
       <div ref={endRef} />
     </div>
   </div>

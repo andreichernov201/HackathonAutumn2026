@@ -13,6 +13,6 @@ export function Topbar({ section, onMenu, onNewChat }: TopbarProps) {
       <button className="mobile-menu icon-button" aria-label="Открыть меню" onClick={onMenu}><Menu size={22} /></button>
       <div className="topbar-title"><span className="eyebrow">Рабочее пространство</span><strong>{navigation.find((item) => item.id === section)?.label}</strong></div>
     </div>
-    <div className="topbar-right"><span className="prototype-pill"><span />Прототип</span><button className="top-new" onClick={onNewChat}><Plus size={17} />Новый диалог</button></div>
+    <div className="topbar-right"><button className="top-new" onClick={onNewChat}><Plus size={17} />Новый диалог</button></div>
   </header>
 }

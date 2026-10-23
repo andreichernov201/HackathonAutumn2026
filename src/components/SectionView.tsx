@@ -14,7 +14,6 @@ export function SectionView({ section, onChooseScenario }: SectionViewProps) {
   return <div className="section-area">
     <div className="section-empty">
       <div className="section-icon"><Icon size={27} /></div>
-      <span className="section-overline">Раздел в подготовке</span>
       <h1>{details.title}</h1>
       <p>{details.text}</p>
       <button onClick={() => onChooseScenario(details.scenario)}>{details.action}<ArrowRight size={17} /></button>
