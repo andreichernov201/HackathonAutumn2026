@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('original PDF pages, zoom, full-document search and return to cited text', async ({ page }) => {
+test('original PDF pages, zoom, full-document search and return to cited text', async ({ page }, testInfo) => {
   await page.goto('/')
   await page.getByRole('button', {name: 'База знаний', exact: true}).click()
   await page.getByRole('button', {name: 'Инструкция по документационному обеспечению управления и документообороту Организации', exact: true}).click()
@@ -23,6 +23,11 @@ test('original PDF pages, zoom, full-document search and return to cited text', 
   await expect(viewer.locator('.textLayer .highlight.selected').first()).toBeVisible()
   await viewer.getByRole('button', {name: 'Следующее совпадение PDF'}).click()
   await expect(viewer.locator('.kb-pdf-search [role="status"]')).toContainText('из')
+  await viewer.getByRole('button', {name: 'Развернуть PDF', exact: true}).click()
+  await expect(page.locator('.kb-pdf:fullscreen')).toBeVisible()
+  await page.screenshot({path: testInfo.outputPath('pdf-viewer.png')})
+  await viewer.getByRole('button', {name: 'Свернуть PDF', exact: true}).click()
+  await expect(page.locator('.kb-pdf:fullscreen')).toHaveCount(0)
   await page.getByRole('button', {name: 'Текст по пунктам', exact: true}).click()
   await expect(page.getByRole('navigation', {name: 'Содержание документа'})).toBeVisible()
   await expect(page.getByRole('button', {name: 'Спросить AI об этом пункте'})).toBeVisible()
