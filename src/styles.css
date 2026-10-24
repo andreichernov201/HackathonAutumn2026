@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./features/knowledge/knowledge.css";
 
 :root {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

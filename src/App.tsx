@@ -8,6 +8,8 @@ import { Topbar } from './components/Topbar'
 import { WelcomeView } from './components/WelcomeView'
 import { WorkspacePanel } from './components/WorkspacePanel'
 import { DocumentsPage } from './components/DocumentsPage'
+import { KnowledgePage } from './features/knowledge/KnowledgePage'
+import type { KnowledgeCitation } from './features/knowledge/types'
 import type { DocumentProject } from './features/documents/types'
 import { assistantGateway } from './features/assistant/gateway'
 import { scenarios } from './features/assistant/scenarios'
@@ -32,6 +34,11 @@ export default function App() {
   const workspace = activeSession?.workspace ?? closedWorkspace
 
   useEffect(() => sessionStore.save(sessions), [sessions])
+  useEffect(() => {
+    const onHash = () => {if (location.hash.startsWith('#knowledge')) setSection('knowledge')}
+    onHash(); window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
 
   function updateSession(id: string, update: (session: ChatSession) => ChatSession) {
     setSessions((previous) => previous.map((item) => item.id === id ? update(item) : item))
@@ -106,7 +113,7 @@ export default function App() {
       const result = await assistantGateway.submit({
         conversationId: id, message: text, scenario,
         history: existing?.messages ?? [],
-        context: { documentProjectId: existing?.documentProjectId, workspace: existing?.workspace ?? closedWorkspace, file: fileReference },
+        context: { documentProjectId: existing?.documentProjectId, workspace: existing?.workspace ?? closedWorkspace, file: fileReference, knowledgeSource: existing?.knowledgeSource },
       })
       if (result.status !== 'completed') {
         setRequestError(result.message)
@@ -137,6 +144,23 @@ export default function App() {
     setActiveSessionId(id); setSelectedDocumentId(project.projectId); setSection('assistant')
   }
 
+  function askKnowledge(source: KnowledgeCitation) {
+    const id = crypto.randomUUID()
+    const time = new Date().toISOString()
+    const session: ChatSession = {
+      id, title: source.title.slice(0, 54), updatedAt: time, knowledgeSource: source,
+      sources: [source], workspace: {open: true, tab: 'sources', selectedSourceId: source.id},
+      messages: [{id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
+        text: 'Источник закреплён в контексте диалога. Оригинальный пункт доступен справа. Автоматическое объяснение требует подключения AI-сервиса.',
+        blocks: [{type: 'citation', sourceId: source.id}]}],
+    }
+    setSessions(previous => [session, ...previous]); setActiveSessionId(id)
+    setSection('assistant'); setDraft('Объясни этот пункт простым языком: ' + source.locator)
+    setScenario('requirement'); setFile(null); setRequestError('')
+    history.pushState(null, '', location.pathname + location.search)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   return <div className="app-shell selection:bg-blue-100">
     <Sidebar
       open={mobileOpen}
@@ -156,13 +180,15 @@ export default function App() {
         ? activeSession
           ? <ConversationView session={activeSession} onSource={selectSource} onStartDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setSection('documents')}} />
           : <WelcomeView onChooseScenario={chooseScenario} />
-        : section === 'documents' ? <DocumentsPage initialProjectId={selectedDocumentId} onOpenChat={openDocumentInChat} /> : <SectionView section={section} onChooseScenario={chooseScenario} />}
+        : section === 'documents' ? <DocumentsPage initialProjectId={selectedDocumentId} onOpenChat={openDocumentInChat} /> : section === 'knowledge' ? null : <SectionView section={section} onChooseScenario={chooseScenario} />}
+      <div className="knowledge-host" hidden={section !== 'knowledge'}><KnowledgePage onAsk={askKnowledge}/></div>
       {requestError && <p className="request-error" role="alert">{requestError}</p>}
       {section === 'assistant' && <Composer inputRef={inputRef} draft={draft} file={file} scenario={scenario} submitting={submitting}
         onDraft={setDraft} onFile={setFile} onScenario={setScenario} onSubmit={() => void submit()} />
       }
     </main>
     {section === 'assistant' && activeSession && <WorkspacePanel state={workspace} sources={activeSession.sources ?? []} documentProjectId={activeSession.documentProjectId} onOpenDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setSection('documents')}}
+      onOpenKnowledge={(sectionId) => {setSection('knowledge'); location.hash = `knowledge/sections/${sectionId}`}}
       onClose={() => updateSession(activeSession.id, (session) => ({ ...session, workspace: { ...session.workspace ?? closedWorkspace, open: false } }))}
       onTab={setWorkspaceTab} />}
   </div>

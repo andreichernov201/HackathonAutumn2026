@@ -6,13 +6,17 @@ from uuid import UUID
 
 from fastapi import FastAPI, Cookie, Depends, File, Header, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel
 
 from .models import ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
 from .service import DocumentsService, TEMPLATE_ID
+from .knowledge.service import KnowledgeService, KnowledgeError
+from .knowledge.router import build_router
+from .knowledge.seed import import_case_sources
 
-app = FastAPI(title='Regula AI Documents API', version='0.1.0')
+app = FastAPI(title='Regula AI API', version='0.2.0', docs_url='/api/docs', openapi_url='/api/openapi.json', redoc_url=None)
 service = DocumentsService(Path(os.getenv('REGULA_DATA_DIR', './data')))
 secret = os.getenv('REGULA_SESSION_SECRET', 'local-development-only-change-me')
 signer = URLSafeTimedSerializer(secret)
@@ -31,6 +35,27 @@ def mutation(user=Depends(actor), x_csrf_token: str | None = Header(default=None
     if not x_csrf_token or not secrets.compare_digest(x_csrf_token, user.get('csrf', '')):
         raise HTTPException(403, 'csrf_required')
     return user
+
+knowledge_service = KnowledgeService(service.root, service.db_path)
+if os.getenv('REGULA_IMPORT_CASE_CORPUS', '1') == '1':
+    import_case_sources(knowledge_service)
+app.include_router(build_router(knowledge_service, actor, mutation, signer))
+
+@app.exception_handler(KnowledgeError)
+def knowledge_error(request, exc):
+    return JSONResponse(status_code=exc.status, content={'detail': exc.code})
+
+@app.middleware('http')
+async def knowledge_response_security(request, call_next):
+    if request.url.path.startswith('/api/knowledge/'):
+        length = request.headers.get('content-length', '')
+        if length.isdigit() and int(length) > 22 * 1024 * 1024:
+            return JSONResponse(status_code=413, content={'detail': 'invalid_file_size'})
+    response = await call_next(request)
+    if request.url.path.startswith('/api/knowledge/'):
+        response.headers['Cache-Control'] = 'private, no-store'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 def admin(user=Depends(mutation)):
     # Template replacement is disabled in the anonymous demo. Deployments can

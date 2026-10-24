@@ -7,6 +7,8 @@ services:
       REGULA_DATA_DIR: /data
       REGULA_SESSION_SECRET: ${REGULA_SESSION_SECRET:?set REGULA_SESSION_SECRET}
       REGULA_SECURE_COOKIE: "0"
+      REGULA_KNOWLEDGE_ADMIN_TOKEN: ${REGULA_KNOWLEDGE_ADMIN_TOKEN:-}
+      REGULA_IMPORT_CASE_CORPUS: ${REGULA_IMPORT_CASE_CORPUS:-1}
     volumes:
       - regula_data:/data
     restart: unless-stopped

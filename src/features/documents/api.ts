@@ -1,16 +1,8 @@
 import type { DocumentProject, DocumentTemplate, Session, Validation } from './types'
+import { request, session } from '../../shared/http'
 
-let csrfToken = ''
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, { credentials: 'same-origin', ...init, headers: { ...(init.body instanceof FormData ? {} : {'Content-Type': 'application/json'}), ...(init.method && init.method !== 'GET' ? {'X-CSRF-Token': csrfToken} : {}), ...init.headers } })
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${response.status}`)
-  }
-  return response.json() as Promise<T>
-}
 export const documentsApi = {
-  async session(): Promise<Session> { const session = await request<Session>('/api/session'); csrfToken = session.csrfToken; return session },
+  async session(): Promise<Session> { return session() },
   templates: () => request<DocumentTemplate[]>('/api/document-templates'),
   projects: () => request<DocumentProject[]>('/api/document-projects'),
   get: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}`),
