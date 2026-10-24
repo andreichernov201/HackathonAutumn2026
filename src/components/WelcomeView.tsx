@@ -16,7 +16,7 @@ export function WelcomeView({ onChooseScenario }: { onChooseScenario: (id: Scena
       <div className="hero-symbol"><Sparkles size={28} strokeWidth={1.8} /></div>
       <div className="welcome-kicker">ВАШ РАБОЧИЙ АССИСТЕНТ</div>
       <h1>Чем могу помочь?</h1>
-      <p className="welcome-description text-pretty">Найдите нужное требование, подготовьте документ или начните проверку — всё в одном рабочем пространстве.</p>
+      <p className="welcome-description text-pretty">Посмотрите демонстрационный ответ с источниками и соберите черновик распоряжения в одном рабочем пространстве.</p>
       <div className="quick-grid" aria-label="Быстрые действия">
         {quickActions.map(({ id, icon: Icon, accent }) => (
           <button className="quick-card" key={id} onClick={() => onChooseScenario(id)}>
@@ -29,3 +29,4 @@ export function WelcomeView({ onChooseScenario }: { onChooseScenario: (id: Scena
     </div>
   </div>
 }
+
