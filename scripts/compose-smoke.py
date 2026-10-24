@@ -86,7 +86,7 @@ request('/api/knowledge/documents', raw=body[:-len(suffix)] + b' ' + suffix, met
 endpoint = urllib.parse.urlsplit(BASE + '/api/knowledge/documents')
 connection = (http.client.HTTPSConnection if endpoint.scheme == 'https' else http.client.HTTPConnection)(endpoint.netloc, timeout=30)
 try:
-    connection.request('POST', endpoint.path, headers={'Content-Length': str(22 * 1024 * 1024 + 1)})
+    connection.request('POST', endpoint.path, body=b'x', headers={'Content-Length': str(22 * 1024 * 1024 + 1)})
     response = connection.getresponse()
     assert response.status == 413, response.status
     response.read()
