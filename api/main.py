@@ -16,7 +16,7 @@ from .knowledge.service import KnowledgeService, KnowledgeError
 from .knowledge.router import build_router
 from .knowledge.seed import import_case_sources
 
-app = FastAPI(title='Regula AI API', version='0.2.0')
+app = FastAPI(title='Regula AI API', version='0.2.0', docs_url='/api/docs', openapi_url='/api/openapi.json', redoc_url=None)
 service = DocumentsService(Path(os.getenv('REGULA_DATA_DIR', './data')))
 secret = os.getenv('REGULA_SESSION_SECRET', 'local-development-only-change-me')
 signer = URLSafeTimedSerializer(secret)

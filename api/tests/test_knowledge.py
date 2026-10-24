@@ -164,6 +164,8 @@ def test_shared_ai_tools_chain_and_exact_citation_verification(corpus):
     upload(admin)
     reader = device()
     tools = reader.get('/api/knowledge/tools').json()
+    assert reader.get('/api/docs').status_code == 200
+    assert '/api/knowledge/search' in reader.get('/api/openapi.json').json()['paths']
     assert len(tools) == 6
     assert all(tool['inputSchema']['additionalProperties'] is False for tool in tools)
     assert all(tool['sourceContentTrust'] == 'untrusted_data' for tool in tools)
