@@ -1,3 +1,7 @@
+export class HttpError extends Error {
+  constructor(public status: number, message: string) {super(message); this.name = 'HttpError'}
+}
+
 let csrfToken = ''
 let sessionPromise: Promise<{deviceId: string; csrfToken: string}> | undefined
 
@@ -14,11 +18,12 @@ export function session() {
   return sessionPromise
 }
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const writes = Boolean(init.method && init.method !== 'GET')
-  if (!csrfToken) await session()
+// Downloads and JSON calls use the same bootstrap, cookies, CSRF and errors.
+export async function requestResponse(path: string, init: RequestInit = {}): Promise<Response> {
+  const writes = !['GET', 'HEAD', 'OPTIONS'].includes((init.method || 'GET').toUpperCase())
+  await session()
   const response = await fetch(path, {
-    credentials: 'same-origin', ...init,
+    ...init, credentials: 'same-origin',
     headers: {
       ...(init.body instanceof FormData ? {} : {'Content-Type': 'application/json'}),
       ...(writes ? {'X-CSRF-Token': csrfToken} : {}), ...init.headers,
@@ -26,7 +31,11 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   })
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
-    throw new Error(typeof body.detail === 'string' ? body.detail : `HTTP ${response.status}`)
+    throw new HttpError(response.status, typeof body.detail === 'string' ? body.detail : `HTTP ${response.status}`)
   }
-  return response.json() as Promise<T>
+  return response
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return (await requestResponse(path, init)).json() as Promise<T>
 }

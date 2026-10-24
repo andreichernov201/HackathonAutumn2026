@@ -34,12 +34,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - uses: actions/setup-python@v5
         with:
-          context: .
-          push: false
-      - uses: docker/build-push-action@v7
+          python-version: '3.12'
+      - name: Configure disposable integration environment
+        run: |
+          python - <<'PYCODE'
+          import os, secrets
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              for name in ('REGULA_SESSION_SECRET', 'REGULA_KNOWLEDGE_ADMIN_TOKEN'):
+                  env.write(f'{name}={secrets.token_urlsafe(48)}\n')
+          PYCODE
+      - run: docker compose config --quiet
+      - run: docker compose up --build --wait --wait-timeout 180
+      - uses: actions/setup-node@v4
         with:
-          context: .
-          file: api/Dockerfile
-          push: false
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          REGULA_TEST_URL: http://127.0.0.1:8080
+      - run: python scripts/compose-smoke.py
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose logs --no-color --tail=150
+      - name: Remove disposable stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans

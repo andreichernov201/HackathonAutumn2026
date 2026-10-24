@@ -18,22 +18,27 @@ from .service import KnowledgeError, KnowledgeService
 from .tools import definitions, invoke
 
 
+def configured_token():
+    value = os.getenv('REGULA_KNOWLEDGE_ADMIN_TOKEN', '')
+    return value if len(value) >= 32 else ''
+
+
+def principal_for(user):
+    token = configured_token()
+    grant = hashlib.sha256(token.encode()).hexdigest() if token else ''
+    granted_at = user.get('knowledgeGrantedAt', 0)
+    unexpired = isinstance(granted_at, (int, float)) and 0 <= time.time() - granted_at < 8 * 60 * 60
+    is_admin = bool(grant and unexpired and secrets.compare_digest(str(user.get('knowledgeGrant', '')), grant))
+    return Principal(id=user['deviceId'], role='knowledge_admin' if is_admin else 'reader')
+
+
 def build_router(service: KnowledgeService, actor, mutation, signer):
     router = APIRouter(prefix='/api/knowledge', tags=['knowledge'])
     attempts: dict[str, tuple[float, int]] = {}
     attempts_lock = threading.Lock()
 
-    def configured_token():
-        value = os.getenv('REGULA_KNOWLEDGE_ADMIN_TOKEN', '')
-        return value if len(value) >= 32 else ''
-
     def principal(user=Depends(actor)):
-        token = configured_token()
-        grant = hashlib.sha256(token.encode()).hexdigest() if token else ''
-        granted_at = user.get('knowledgeGrantedAt', 0)
-        unexpired = isinstance(granted_at, (int, float)) and 0 <= time.time() - granted_at < 8 * 60 * 60
-        is_admin = bool(grant and unexpired and secrets.compare_digest(str(user.get('knowledgeGrant', '')), grant))
-        return Principal(id=user['deviceId'], role='knowledge_admin' if is_admin else 'reader')
+        return principal_for(user)
 
     def writer(user=Depends(mutation), identity=Depends(principal)):
         service.require_admin(identity)
