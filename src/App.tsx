@@ -11,6 +11,8 @@ import { DocumentsPage } from './components/DocumentsPage'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import type { KnowledgeCitation } from './features/knowledge/types'
 import type { DocumentProject } from './features/documents/types'
+import { documentsApi } from './features/documents/api'
+import { isOrderCreationCommand, recommendedOrderTemplateId } from './features/assistant/orderTemplates'
 import { assistantGateway } from './features/assistant/gateway'
 import { scenarios } from './features/assistant/scenarios'
 import { sessionStore } from './features/assistant/sessionStore'
@@ -134,14 +136,14 @@ export default function App() {
     setSubmitting(true)
 
     try {
-      if (scenario === 'document' || /созда(ть|й|м|ю).*?(документ|распоряжен)/i.test(text)) {
-        setSection('documents')
-        setSelectedDocumentId(undefined)
-        setDocumentOpenVersion((value) => value + 1)
+      if (scenario === 'document' || isOrderCreationCommand(text)) {
+        const templates = await documentsApi.templates()
+        const recommendedTemplateId = recommendedOrderTemplateId(text, templates)
         const reply: ChatMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          text: 'Открыл раздел «Документы». Выберите шаблон и создайте документ. Затем его можно открыть обратно в чате.',
+          text: recommendedTemplateId ? 'Нашёл подходящий модуль среди семи доступных DOCX-шаблонов. Создайте проект — он сразу откроется в редакторе.' : 'Выберите модуль из семи доступных DOCX-шаблонов. После создания проект сразу откроется в редакторе.',
+          blocks: [{type: 'template_suggestions', recommendedTemplateId, templates: templates.map(({templateId, title, kind, note, sourceStatus}) => ({templateId, title, kind, note, sourceStatus}))}],
           createdAt: new Date().toISOString(),
           origin: 'api',
         }
@@ -190,6 +192,22 @@ export default function App() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function createDocumentFromChat(templateId: string) {
+    const project = await documentsApi.create(templateId)
+    const id = activeSessionId
+    if (id) {
+      const time = new Date().toISOString()
+      const reply: ChatMessage = {
+        id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
+        text: `Создан проект «${project.title}». Он открыт в редакторе; связь с этим чатом сохранена.`,
+      }
+      updateSession(id, session => ({...session, documentProjectId: project.projectId, updatedAt: time, messages: [...session.messages, reply], workspace: {open: true, tab: 'document'}}))
+    }
+    setSelectedDocumentId(project.projectId)
+    setDocumentOpenVersion(value => value + 1)
+    setSection('documents')
   }
 
   function openDocumentInChat(project: DocumentProject) {
@@ -323,6 +341,7 @@ export default function App() {
                 setDocumentOpenVersion((value) => value + 1)
                 setSection('documents')
               }}
+              onCreateDocument={createDocumentFromChat}
             />
           ) : (
             <div className="chat-empty">

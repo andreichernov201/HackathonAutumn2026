@@ -65,6 +65,20 @@ button:disabled {
   cursor: default;
   opacity: 0.5;
 }
+
+.template-suggestions { margin-top: 12px; padding: 15px; border: 1px solid #d9e6fa; border-radius: var(--radius-panel); background: #fbfdff; }
+.template-suggestions h3 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: var(--text-base); color: #23416e; }
+.template-suggestions > p { margin: 7px 0 12px; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
+.template-suggestion-list { display: grid; gap: 8px; }
+.template-suggestion { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid #e1e8f3; border-radius: var(--radius-control); background: #fff; }
+.template-suggestion.recommended { border-color: #77a9ff; background: #f3f8ff; }
+.template-suggestion > div { display: grid; gap: 3px; min-width: 0; }
+.template-suggestion small { color: var(--accent); font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.template-suggestion strong { color: var(--text); font-size: var(--text-sm); line-height: 1.35; }
+.template-suggestion span { color: var(--muted); font-size: var(--text-xs); line-height: 1.35; }
+.template-suggestion button { flex: none; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: var(--radius-control); padding: 8px 10px; background: var(--accent); color: #fff; font-size: var(--text-xs); font-weight: 650; }
+.template-suggestion button:disabled { cursor: wait; opacity: .6; }
+.template-create-error { color: var(--danger) !important; }
 a {
   color: var(--accent);
 }

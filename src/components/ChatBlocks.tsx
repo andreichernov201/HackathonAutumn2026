@@ -1,4 +1,5 @@
-import { ArrowRight, BookOpen, CheckCircle2, CircleHelp, FileText, ListChecks } from 'lucide-react'
+import { ArrowRight, BookOpen, CheckCircle2, CircleHelp, FilePlus2, FileText, ListChecks } from 'lucide-react'
+import { useState } from 'react'
 import type { ChatBlock, SourceReference } from '../features/assistant/types'
 
 interface Props {
@@ -6,9 +7,18 @@ interface Props {
   sources: SourceReference[]
   onSource: (id: string) => void
   onStartDocument: () => void
+  onCreateDocument: (templateId: string) => Promise<void>
 }
 
-export function ChatBlocks({ blocks, sources, onSource, onStartDocument }: Props) {
+export function ChatBlocks({ blocks, sources, onSource, onStartDocument, onCreateDocument }: Props) {
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string>()
+  const [createError, setCreateError] = useState('')
+  async function create(templateId: string) {
+    setCreatingTemplateId(templateId)
+    setCreateError('')
+    try { await onCreateDocument(templateId) } catch { setCreateError('Не удалось создать проект. Попробуйте ещё раз.') }
+    finally { setCreatingTemplateId(undefined) }
+  }
   return (
     <div className="chat-blocks">
       {blocks.map((block, index) => {
@@ -84,6 +94,16 @@ export function ChatBlocks({ blocks, sources, onSource, onStartDocument }: Props
               </button>
             </section>
           )
+        if (block.type === 'template_suggestions')
+          return <section key={index} className="template-suggestions" aria-label="Модули DOCX">
+            <h3><FileText size={16} />Выберите модуль DOCX</h3>
+            <p>{block.recommendedTemplateId ? 'Подходящий модуль отмечен по формулировке запроса. Можно выбрать другой из доступного каталога.' : 'В запросе не удалось однозначно определить тип. Выберите один из доступных модулей.'}</p>
+            <div className="template-suggestion-list">{block.templates.map(template => <article className={`template-suggestion ${template.templateId === block.recommendedTemplateId ? 'recommended' : ''}`} key={template.templateId}>
+              <div><small>{template.templateId === block.recommendedTemplateId ? 'Рекомендуется' : template.kind}</small><strong>{template.title}</strong><span>{template.note}</span></div>
+              <button type="button" disabled={template.sourceStatus !== 'ready' || Boolean(creatingTemplateId)} onClick={() => void create(template.templateId)}><FilePlus2 size={14}/>{creatingTemplateId === template.templateId ? 'Создаём…' : 'Создать и открыть'}</button>
+            </article>)}</div>
+            {createError && <p className="template-create-error" role="alert">{createError}</p>}
+          </section>
         return (
           <section key={index} className="result-card">
             <h3>

@@ -10,8 +10,9 @@ interface Props {
   session: ChatSession
   onSource: (id: string) => void
   onStartDocument: () => void
+  onCreateDocument: (templateId: string) => Promise<void>
 }
-export function ConversationView({ session, onSource, onStartDocument }: Props) {
+export function ConversationView({ session, onSource, onStartDocument, onCreateDocument }: Props) {
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export function ConversationView({ session, onSource, onStartDocument }: Props) 
                     sources={session.sources ?? []}
                     onSource={onSource}
                     onStartDocument={onStartDocument}
+                    onCreateDocument={onCreateDocument}
                   />
                 )}
                 <time>{formatTime(message.createdAt)}</time>

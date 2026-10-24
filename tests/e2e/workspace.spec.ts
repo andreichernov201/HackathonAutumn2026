@@ -90,6 +90,21 @@ test('unconnected file checking never answers from a second normative corpus', a
   await expect(page.locator('.citation-card')).toHaveCount(0)
 })
 
+test('order command recommends a real DOCX module and opens the created project', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('textbox', {name: 'Ваш запрос'}).fill('Создай приказ о назначении ответственных за делопроизводство')
+  await page.getByRole('button', {name: 'Отправить запрос'}).click()
+  const modules = page.getByRole('region', {name: 'Модули DOCX'})
+  await expect(modules.locator('.template-suggestion')).toHaveCount(7)
+  const recommended = modules.locator('.template-suggestion.recommended')
+  await expect(recommended).toContainText('Приказ о назначении ответственных за делопроизводство')
+  await recommended.getByRole('button', {name: 'Создать и открыть'}).click()
+  await expect(page.locator('.docs-editor-head')).toBeVisible()
+  await expect(page.getByRole('textbox', {name: 'Название проекта'})).toHaveValue(/Приказ о назначении ответственных за делопроизводство/)
+  await page.getByRole('button', {name: 'Открыть в чате', exact: true}).click()
+  await expect(page.locator('.message-row.assistant')).toContainText('связь с этим чатом сохранена')
+})
+
 test('generation keeps later edits and downloads a real saved DOCX', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Документы', exact: true }).click()
