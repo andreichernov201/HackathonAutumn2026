@@ -148,7 +148,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - name: Upload pinned release and deploy
+      - name: Upload pinned images and deploy
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -168,6 +168,6 @@ jobs:
           ssh_opts=(-i "$temp/key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known_hosts")
           target="regula-deploy@171.22.130.63"
           ssh "${ssh_opts[@]}" "$target" "mkdir -p /home/regula-deploy/incoming/$GITHUB_SHA"
-          scp "${ssh_opts[@]}" deploy/compose.yaml deploy/compose.production.yaml deploy/Caddyfile "$temp/images.env" "$target:/home/regula-deploy/incoming/$GITHUB_SHA/"
+          scp "${ssh_opts[@]}" "$temp/images.env" "$target:/home/regula-deploy/incoming/$GITHUB_SHA/"
           printf '%s\n' "$GHCR_TOKEN" | ssh "${ssh_opts[@]}" "$target" "sudo -n /usr/local/sbin/regula-rollout deploy $GITHUB_SHA $GITHUB_ACTOR"
 
