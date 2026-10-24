@@ -7,7 +7,7 @@ from io import BytesIO
 MAX_BYTES = 20 * 1024 * 1024
 MAX_TEXT = 4_000_000
 MAX_SECTIONS = 20000
-EXTRACTOR = 'regula-structure-v3'
+EXTRACTOR = 'regula-structure-v4'
 CASE_WATERMARK = 'УЧЕБНЫЙ ПРИМЕР ДЛЯ ИТ-СОРЕВНОВАНИЙ. НЕ ЯВЛЯЕТСЯ ДЕЙСТВУЮЩИМ ДОКУМЕНТОМ'
 MIMES = {
     'pdf': {'application/pdf'},
@@ -15,7 +15,7 @@ MIMES = {
     'txt': {'text/plain'},
 }
 NUMBER = re.compile(r'^(\d+(?:\.\d+)*)(?:[.)])?\s+(.+)$')
-CHAPTER = re.compile(r'^(Глава|Раздел|Приложение)\s+([\w.-]+)', re.I)
+CHAPTER = re.compile(r'^(Глава|Раздел|Приложение)\s+(?:№\s*)?([\w.-]+)', re.I)
 
 
 @dataclass

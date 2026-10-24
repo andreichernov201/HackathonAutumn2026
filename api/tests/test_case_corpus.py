@@ -46,6 +46,8 @@ def test_case_document_search_and_instruction_structure(case):
     assert any(point.sectionNumber == '1.3' for point in sections)
     assert any(point.sectionNumber == '9.16' for point in sections)
     assert not any(point.sectionNumber == '56' for point in sections)
+    appendix = next(point for point in sections if point.heading == 'Приложение № 1')
+    assert appendix.parentId is None and appendix.pageStart == 51
     point = next(point for point in sections if point.sectionNumber == '1.3')
     full = service.get_knowledge_section(reader, point.id)
     assert full.pageStart == full.pageEnd == 2
