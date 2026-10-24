@@ -66,6 +66,9 @@ jobs:
           docker run --rm -e DOMAIN -e ACME_EMAIL -e REGULA_ACCESS_USER -e REGULA_ACCESS_HASH="$hash" \
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine \
             caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm -e DOMAIN -e ACME_EMAIL -e REGULA_ACCESS_USER -e REGULA_ACCESS_HASH="$hash" -e REGULA_PUBLIC_DEMO=1 \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
       - run: docker compose up --build --wait --wait-timeout 180
       - uses: actions/setup-node@v4
         with:

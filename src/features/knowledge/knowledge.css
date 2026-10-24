@@ -81,6 +81,8 @@
 .kb-result-footer { display: flex; gap: 12px; justify-content: space-between; font-size: 9px; color: #9aa8b9; padding-top: 8px; border-top: 1px solid #f0f3f7; }
 .kb-result a, .kb-source-topline a { color: #7294c3; text-decoration: none; }
 .kb-viewer { min-width: 0; }
+.kb-view-modes { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.kb-view-modes button[aria-pressed="true"] { color: #fff; background: #3157d5; border-color: #3157d5; }
 .kb-viewer-bar { display: flex; gap: 14px; align-items: center; margin-bottom: 23px; }
 .kb-viewer-bar > .kb-button:last-child:not(:first-child) { margin-left: auto; }
 .kb-document-heading h1 { font-size: 23px; line-height: 1.4; margin-bottom: 16px; max-width: 900px; }

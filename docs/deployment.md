@@ -102,6 +102,12 @@ sudo install -o root -g root -m 0600 deploy/regula.env.example /etc/regula/regul
 
 При успешном push в `main`: npm `ci`/build, pytest и одноразовый Docker/browser/smoke стенд проходят первыми; два образа публикуются с тегами `sha-<commit>`, их digest передаются deploy job. Сервер использует именно digest, не изменяемый тег. Compose-файлы и Caddyfile он берёт по тому же SHA из `main`, а не из каталога, доступного deploy-пользователю. В GitHub Actions проверьте jobs `build`, `api`, `docker`, `publish-api`, `publish-web`, `deploy`. Если `DEPLOY_ENABLED` не `true`, публикация есть, автоматического доступа к VPS нет. Если домен и секреты настроены уже после слияния PR, задайте `DEPLOY_ENABLED=true` и запустите Actions → CI → Run workflow для ветки `main`: выполнятся те же тесты, публикация по SHA и выкладка. Не запускайте `scripts/compose-smoke.py` на production: он создаёт проекты и загружает тестовый файл.
 
+## Публичная демонстрация
+
+По умолчанию `REGULA_PUBLIC_DEMO=0`: сайт и API закрыты Basic Auth. Только по явному решению владельца для публичного показа синтетического корпуса можно установить `REGULA_PUBLIC_DEMO=1` в root-only `/etc/regula/regula.env` и выложить новый выпуск. HTTPS, Secure/HttpOnly cookies, CSRF и отключённая документация API сохраняются; `REGULA_KNOWLEDGE_ADMIN_TOKEN` оставьте пустым, чтобы запретить загрузку и изменение общего корпуса. Имя и хеш пароля сохраните для возврата в закрытый режим. При обновлении существующего VPS сначала установите обновлённый root-owned `deploy/regula-rollout`: он проверяет HTTPS и для закрытого, и для публичного выпуска.
+
+Публичный адрес может открыть любой человек: секретность ссылки не является контролем доступа. Не загружайте реальные персональные или конфиденциальные документы. Проекты по-прежнему привязаны к подписанной сессии браузера; это demo-изоляция, не корпоративная авторизация. Для возврата к ограниченному доступу задайте `REGULA_PUBLIC_DEMO=0` и пересоздайте Caddy с текущими env-параметрами. Откат к старому выпуску без этого переключателя возвращает парольный шлюз.
+
 ## 5. Staging без домена
 
 Для временного закрытого стенда создайте отдельные `REGULA_PROJECT=regula-stage`, `REGULA_DATA_VOLUME=regula_stage_data`, `REGULA_ENV=development`, `REGULA_SECURE_COOKIE=0` и отдельный случайный секрет в root-only `/etc/regula/staging.env`. Создайте `docker volume create regula_stage_data`. Используйте **те же опубликованные образы по digest** и файлы `deploy/compose.yaml`, `deploy/compose.staging.yaml`; пример после заполнения root-only `images.env`:

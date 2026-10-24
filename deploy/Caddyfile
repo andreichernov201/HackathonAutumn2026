@@ -4,7 +4,8 @@
 
 {$DOMAIN} {
   encode zstd gzip
-  basic_auth {
+  @passwordGate expression `{$REGULA_PUBLIC_DEMO:0} != 1`
+  basic_auth @passwordGate {
     {$REGULA_ACCESS_USER} {$REGULA_ACCESS_HASH}
   }
   header {
