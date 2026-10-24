@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -46,6 +50,22 @@ jobs:
                   env.write(f'{name}={secrets.token_urlsafe(48)}\n')
           PYCODE
       - run: docker compose config --quiet
+      - name: Validate deployment configurations
+        env:
+          REGULA_API_IMAGE: ghcr.io/andreichernov201/hackathonautumn2026-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          REGULA_WEB_IMAGE: ghcr.io/andreichernov201/hackathonautumn2026-web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          REGULA_DATA_VOLUME: regula_data
+          DOMAIN: example.org
+          ACME_EMAIL: ops@example.org
+          REGULA_ACCESS_USER: demo
+          REGULA_ACCESS_HASH: test-hash
+        run: |
+          docker compose -f deploy/compose.yaml -f deploy/compose.production.yaml config --quiet
+          docker compose -f deploy/compose.yaml -f deploy/compose.staging.yaml config --quiet
+          hash=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext ci-only)
+          docker run --rm -e DOMAIN -e ACME_EMAIL -e REGULA_ACCESS_USER -e REGULA_ACCESS_HASH="$hash" \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
       - run: docker compose up --build --wait --wait-timeout 180
       - uses: actions/setup-node@v4
         with:
@@ -63,3 +83,92 @@ jobs:
       - name: Remove disposable stack
         if: always()
         run: docker compose down --volumes --remove-orphans
+
+  publish-api:
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    needs: [build, api, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/andreichernov201/hackathonautumn2026-api:sha-${{ github.sha }}
+
+  publish-web:
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    needs: [build, api, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/andreichernov201/hackathonautumn2026-web:sha-${{ github.sha }}
+
+  deploy:
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    needs: [publish-api, publish-web]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: regula-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload pinned images and deploy
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_DIGEST: ${{ needs.publish-api.outputs.digest }}
+          WEB_DIGEST: ${{ needs.publish-web.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          temp=$(mktemp -d)
+          trap 'rm -rf "$temp"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$temp/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$temp/known_hosts"
+          chmod 600 "$temp/key" "$temp/known_hosts"
+          printf 'REGULA_API_IMAGE=ghcr.io/andreichernov201/hackathonautumn2026-api@%s\nREGULA_WEB_IMAGE=ghcr.io/andreichernov201/hackathonautumn2026-web@%s\n' "$API_DIGEST" "$WEB_DIGEST" > "$temp/images.env"
+          ssh_opts=(-i "$temp/key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known_hosts")
+          target="regula-deploy@171.22.130.63"
+          ssh "${ssh_opts[@]}" "$target" "mkdir -p /home/regula-deploy/incoming/$GITHUB_SHA"
+          scp "${ssh_opts[@]}" "$temp/images.env" "$target:/home/regula-deploy/incoming/$GITHUB_SHA/"
+          printf '%s\n' "$GHCR_TOKEN" | ssh "${ssh_opts[@]}" "$target" "sudo -n /usr/local/sbin/regula-rollout deploy $GITHUB_SHA $GITHUB_ACTOR"
+

@@ -1,0 +1,8 @@
+services:
+  web:
+    ports:
+      - "127.0.0.1:8080:8080"
+  api:
+    environment:
+      REGULA_ENV: development
+      REGULA_SECURE_COOKIE: "0"

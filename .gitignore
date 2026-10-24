@@ -18,3 +18,8 @@ coverage
 
 test-results/
 playwright-report/
+
+# Local deployment credentials and pinned release metadata.
+deploy/*.env
+!deploy/*.env.example
+

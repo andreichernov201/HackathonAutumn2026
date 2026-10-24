@@ -1,0 +1,50 @@
+name: ${REGULA_PROJECT:-regula}
+
+services:
+  api:
+    image: ${REGULA_API_IMAGE:?pin api image by digest}
+    environment:
+      REGULA_ENV: ${REGULA_ENV:-production}
+      REGULA_SECURE_COOKIE: ${REGULA_SECURE_COOKIE:-1}
+      REGULA_SESSION_SECRET: ${REGULA_SESSION_SECRET:?required}
+      REGULA_KNOWLEDGE_ADMIN_TOKEN: ${REGULA_KNOWLEDGE_ADMIN_TOKEN:-}
+      REGULA_IMPORT_CASE_CORPUS: ${REGULA_IMPORT_CASE_CORPUS:-1}
+      REGULA_DATA_DIR: /data
+      REGULA_QWEN_URL: ${REGULA_QWEN_URL:-}
+      REGULA_QWEN_TIMEOUT_SECONDS: ${REGULA_QWEN_TIMEOUT_SECONDS:-8}
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      start_period: 30s
+      retries: 4
+    mem_limit: 1536m
+    cpus: 1.5
+    restart: unless-stopped
+    logging: &logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  web:
+    image: ${REGULA_WEB_IMAGE:?pin web image by digest}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 3s
+      start_period: 10s
+      retries: 4
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+    logging: *logs
+
+volumes:
+  data:
+    external: true
+    name: ${REGULA_DATA_VOLUME:?set stable existing or newly created volume name}

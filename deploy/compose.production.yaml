@@ -1,0 +1,34 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set a real domain}
+      REGULA_ACCESS_USER: ${REGULA_ACCESS_USER:?required}
+      REGULA_ACCESS_HASH: ${REGULA_ACCESS_HASH:?required}
+      ACME_EMAIL: ${ACME_EMAIL:?required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+    external: true
+    name: ${REGULA_CADDY_DATA_VOLUME:-regula_caddy_data}
+  caddy_config:
+    external: true
+    name: ${REGULA_CADDY_CONFIG_VOLUME:-regula_caddy_config}
