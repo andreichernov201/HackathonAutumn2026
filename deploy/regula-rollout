@@ -5,6 +5,8 @@ umask 077
 
 ROOT=/opt/regula
 CONFIG=/etc/regula/regula.env
+SOURCE=$ROOT/source.git
+REPO=https://github.com/andreichernov201/HackathonAutumn2026.git
 LOCK=/run/lock/regula-rollout.lock
 exec 9>"$LOCK"
 flock -n 9 || { echo "another rollout is active" >&2; exit 1; }
@@ -19,6 +21,22 @@ compose() {
     --env-file "$CONFIG" --env-file "$ROOT/releases/$sha/images.env" \
     -f "$ROOT/releases/$sha/compose.yaml" \
     -f "$ROOT/releases/$sha/compose.production.yaml" "${@:2}"
+}
+trusted_release() {
+  local sha=$1 file
+  if [[ ! -d $SOURCE ]]; then
+    git init --bare "$SOURCE" >/dev/null
+  fi
+  git -C "$SOURCE" fetch -q "$REPO" main
+  git -C "$SOURCE" merge-base --is-ancestor "$sha" FETCH_HEAD || {
+    echo "release commit is not on main" >&2
+    exit 2
+  }
+  install -d -m 0700 "$ROOT/releases/$sha"
+  for file in compose.yaml compose.production.yaml Caddyfile; do
+    git -C "$SOURCE" show "$sha:deploy/$file" > "$ROOT/releases/$sha/$file"
+    chmod 0644 "$ROOT/releases/$sha/$file"
+  done
 }
 check_https() {
   local domain code
@@ -51,17 +69,12 @@ case "${1:-}" in
     valid_sha "$sha" || exit 2
     [[ $actor =~ ^[A-Za-z0-9-]{1,39}$ ]] || exit 2
     incoming="/home/regula-deploy/incoming/$sha"
-    for file in compose.yaml compose.production.yaml Caddyfile images.env; do
-      [[ -f "$incoming/$file" && ! -L "$incoming/$file" ]] || exit 2
-    done
+    [[ -f "$incoming/images.env" && ! -L "$incoming/images.env" ]] || exit 2
     api=$(sed -n 's/^REGULA_API_IMAGE=//p' "$incoming/images.env")
     web=$(sed -n 's/^REGULA_WEB_IMAGE=//p' "$incoming/images.env")
     [[ $api =~ ^ghcr\.io/andreichernov201/hackathonautumn2026-api@sha256:[a-f0-9]{64}$ ]] || exit 2
     [[ $web =~ ^ghcr\.io/andreichernov201/hackathonautumn2026-web@sha256:[a-f0-9]{64}$ ]] || exit 2
-    install -d -m 0700 "$ROOT/releases/$sha"
-    for file in compose.yaml compose.production.yaml Caddyfile; do
-      install -m 0644 "$incoming/$file" "$ROOT/releases/$sha/$file"
-    done
+    trusted_release "$sha"
     printf 'REGULA_API_IMAGE=%s\nREGULA_WEB_IMAGE=%s\n' "$api" "$web" > "$ROOT/releases/$sha/images.env"
     previous=''
     [[ ! -f "$ROOT/current.sha" ]] || previous=$(cat "$ROOT/current.sha")
