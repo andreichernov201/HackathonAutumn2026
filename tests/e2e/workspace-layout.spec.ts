@@ -45,7 +45,10 @@ test('independent scroll, responsive shell and keyboard save in the document', a
 test('version conflict exposes both drafts and never overwrites silently', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Документы', exact: true }).click()
-  await page.locator('.docs-card').first().getByRole('button', { name: 'Создать проект' }).click()
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith('/api/document-projects') && response.request().method() === 'POST'),
+    page.locator('.docs-card').first().getByRole('button', { name: 'Создать проект' }).click(),
+  ])
   const title = page.getByRole('textbox', { name: 'Название проекта' })
   await title.fill('Мои изменения')
   const projects = await (await page.request.get('/api/document-projects')).json()
@@ -70,7 +73,10 @@ test('version conflict exposes both drafts and never overwrites silently', async
 test('real suggestions remain proposals until accepted and allow a manual revision', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Документы', exact: true }).click()
-  await page.locator('.docs-card').first().getByRole('button', { name: 'Создать проект' }).click()
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith('/api/document-projects') && response.request().method() === 'POST'),
+    page.locator('.docs-card').first().getByRole('button', { name: 'Создать проект' }).click(),
+  ])
   const projects = await (await page.request.get('/api/document-projects')).json()
   const id = projects[0].projectId
   const session = await (await page.request.get('/api/session')).json()
