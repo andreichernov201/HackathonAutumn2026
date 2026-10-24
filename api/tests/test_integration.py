@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import time
 from collections import Counter
 
 import pytest
@@ -15,6 +16,7 @@ from api.knowledge.seed import import_case_sources
 from api.knowledge.service import KnowledgeService
 from api.limits import MAX_REQUEST_BYTES, RequestSizeLimitMiddleware
 from api.service import DocumentsService, SOURCE_DIR
+from api.session import SESSION_MAX_AGE
 from api.tool_registry import ToolRegistry
 
 TOKEN = 'integration-maintenance-key-at-least-32-characters'
@@ -52,7 +54,9 @@ def test_one_session_database_and_tools_from_search_to_generated_document(worksp
     source_bytes = {path.name: path.read_bytes() for path in SOURCE_DIR.glob('*.docx')}
     created = invoke(client, 'create_document_project', templateId='working-group-order').json()
     project_id = created['projectId']
-    assert client.post('/api/knowledge/admin-session', json={'token': TOKEN}).status_code == 200
+    login = client.post('/api/knowledge/admin-session', json={'token': TOKEN})
+    assert login.status_code == 200
+    assert f'Max-Age={SESSION_MAX_AGE}' in login.headers['set-cookie']
     assert client.get('/api/session').json() == session  # Admin grant preserves device + CSRF.
     assert client.get('/api/knowledge/session').json()['role'] == 'knowledge_admin'
     catalog = invoke(client, 'list_knowledge_documents').json()
@@ -82,7 +86,16 @@ def test_one_session_database_and_tools_from_search_to_generated_document(worksp
         assert path.read_bytes() == source_bytes[path.name]
     assert client.post(f"/api/knowledge/versions/{citation['versionId']}/index").status_code == 200
     assert client.get('/api/knowledge/sections/' + point['id']).json()['text'] == point['text']
-    assert client.delete('/api/knowledge/admin-session').status_code == 200
+    # Expiring the maintenance grant must downgrade the role without losing
+    # the persistent device cookie or document ownership.
+    signed = main.signer.loads(client.cookies.get('regula_session'))
+    signed['knowledgeGrantedAt'] = time.time() - 9 * 60 * 60
+    client.cookies.set('regula_session', main.signer.dumps(signed), domain='testserver.local', path='/')
+    assert client.get('/api/knowledge/session').json()['role'] == 'reader'
+    assert client.get('/api/session').json() == session
+    logout = client.delete('/api/knowledge/admin-session')
+    assert logout.status_code == 200
+    assert f'Max-Age={SESSION_MAX_AGE}' in logout.headers['set-cookie']
     assert client.get('/api/session').json() == session
     assert invoke(client, 'get_document_project', projectId=project_id).json()['projectId'] == project_id
     assert client.get('/api/document-projects').json()[0]['projectId'] == project_id

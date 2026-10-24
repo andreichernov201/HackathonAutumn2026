@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, Up
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
+from ..session import write_session_cookie
 from .extract import MAX_BYTES, MIMES
 from .models import (
     AdminLogin, DocumentPage, KnowledgeDocument, KnowledgeSection, KnowledgeVersion,
@@ -65,13 +66,13 @@ def build_router(service: KnowledgeService, actor, mutation, signer):
         if not token or not secrets.compare_digest(body.token.encode(), token.encode()):
             raise KnowledgeError('invalid_admin_token', 403)
         data = {**user, 'knowledgeGrant': hashlib.sha256(token.encode()).hexdigest(), 'knowledgeGrantedAt': time.time()}
-        response.set_cookie('regula_session', signer.dumps(data), max_age=60*60*8, httponly=True, secure=os.getenv('REGULA_SECURE_COOKIE') == '1', samesite='lax')
+        write_session_cookie(response, signer, data)
         return {'role': 'knowledge_admin', 'mode': 'demo'}
 
     @router.delete('/admin-session')
     def admin_logout(response: Response, user=Depends(mutation)):
         data = {key: value for key, value in user.items() if key not in ('knowledgeGrant', 'knowledgeGrantedAt')}
-        response.set_cookie('regula_session', signer.dumps(data), httponly=True, secure=os.getenv('REGULA_SECURE_COOKIE') == '1', samesite='lax')
+        write_session_cookie(response, signer, data)
         return {'role': 'reader', 'mode': 'demo'}
 
     @router.get('/documents', response_model=DocumentPage)

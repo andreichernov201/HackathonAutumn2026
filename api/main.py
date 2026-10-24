@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from .config import session_secret
 from .limits import RequestSizeLimitMiddleware
+from .session import SESSION_MAX_AGE, write_session_cookie
 
 from .models import ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
 from .service import DocumentsService, TEMPLATE_ID
@@ -29,12 +30,12 @@ signer = URLSafeTimedSerializer(secret)
 
 def actor(response: Response, regula_session: str | None = Cookie(default=None)):
     try:
-        data = signer.loads(regula_session, max_age=60 * 60 * 24 * 365) if regula_session else None
+        data = signer.loads(regula_session, max_age=SESSION_MAX_AGE) if regula_session else None
     except BadSignature:
         data = None
     if not isinstance(data, dict) or not data.get('deviceId') or not data.get('csrf'):
         data = {'deviceId': str(uuid4()), 'csrf': secrets.token_urlsafe(24)}
-        response.set_cookie('regula_session', signer.dumps(data), max_age=60*60*24*365, httponly=True, secure=os.getenv('REGULA_SECURE_COOKIE') == '1', samesite='lax')
+        write_session_cookie(response, signer, data)
     return data
 
 def mutation(user=Depends(actor), x_csrf_token: str | None = Header(default=None)):
