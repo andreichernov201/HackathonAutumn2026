@@ -1,17 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { ExternalLink, PanelRightClose, X } from 'lucide-react'
-import type { ProjectDraft, SourceReference, WorkspaceState, WorkspaceTab } from '../features/assistant/types'
+import type { SourceReference, WorkspaceState, WorkspaceTab } from '../features/assistant/types'
 
 interface Props {
   state: WorkspaceState
   sources: SourceReference[]
-  project?: ProjectDraft
+  documentProjectId?: string
+  onOpenDocument?: () => void
   onClose: () => void
   onTab: (tab: WorkspaceTab) => void
-  onProject: (patch: Partial<Pick<ProjectDraft, 'title' | 'chair' | 'projectType'>>) => void
 }
 
-export function WorkspacePanel({ state, sources, project, onClose, onTab, onProject }: Props) {
+export function WorkspacePanel({ state, sources, documentProjectId, onOpenDocument, onClose, onTab }: Props) {
   const selectedRef = useRef<HTMLElement>(null)
   useEffect(() => {
     if (state.open && state.tab === 'sources' && state.selectedSourceId) selectedRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -32,14 +32,9 @@ export function WorkspacePanel({ state, sources, project, onClose, onTab, onProj
           {source.originalUrl ? <a href={source.originalUrl} target="_blank" rel="noreferrer">Открыть оригинал <ExternalLink size={13} /></a> : <span className="source-unavailable">Оригинал не подключён</span>}
         </article>) : <p className="workspace-hint">В этом диалоге пока нет источников.</p>}
       </div>}
-      {state.tab === 'document' && (project ? <div className="project-fields">
-        <p className="workspace-hint">Демонстрационный проект распоряжения. Поля ниже — то же состояние, которое получает чат.</p>
-        <label>Тема рабочей группы<input value={project.title} onChange={(event) => onProject({ title: event.target.value })} placeholder="Например, внедрение системы" /></label>
-        <label>Руководитель рабочей группы<input value={project.chair} onChange={(event) => onProject({ chair: event.target.value })} placeholder="ФИО и должность" /></label>
-        <label>Тип проекта<select value={project.projectType} onChange={(event) => onProject({ projectType: event.target.value as ProjectDraft['projectType'] })}><option value="general">Общий</option><option value="it">ИТ проект</option></select></label>
-        <div className="project-preview"><strong>Проект распоряжения</strong><p>О создании рабочей группы{project.title ? ' по теме «' + project.title + '»' : ' [тема не указана]'}</p><p>Руководитель: {project.chair || '[не указан]'}</p><p>Номер: не присвоен</p><small>Черновик в интерфейсе. DOCX не создан. Подписи и визы отсутствуют.</small></div>
-      </div> : <p className="workspace-hint">Проект появится после выбора сценария «Создать документ».</p>)}
-      {state.tab === 'route' && <div className="route-detail"><p className="workspace-hint">Предварительная информация из демо выдержки матрицы. Это не подтверждённый маршрут визирования.</p><h3>Распоряжение о рабочей группе</h3><ul><li>ДОУ — предусмотрено строкой 6 матрицы.</li><li>Кадровое подразделение — предусмотрено строкой 6.</li><li>ИТ подразделение — условно для ИТ проекта{project?.projectType === 'it' ? ' (проект помечен как ИТ)' : ''}.</li></ul><p>Последовательность визирования регулирует глава 10 Инструкции. Её текста нет в демоданных, поэтому маршрут не построен и согласование не проводилось.</p></div>}
+      {state.tab === 'document' && (documentProjectId ? <div className="project-fields"><p className="workspace-hint">Проект хранится в сервисе документов и доступен из чата и редактора.</p><button className="document-next" onClick={onOpenDocument}>Открыть проект {documentProjectId.slice(0, 8)}</button></div> : <p className="workspace-hint">Создайте серверный проект в разделе «Документы» и откройте его в чате.</p>)}
+      {state.tab === 'route' && <div className="route-detail"><p className="workspace-hint">Предварительная информация из синтетической матрицы. Это не фактический маршрут визирования.</p><h3>Распоряжение о рабочей группе</h3><ul><li>ДОУ — предусмотрено строкой 6 матрицы.</li><li>Кадровое подразделение — предусмотрено строкой 6.</li><li>ИТ подразделение — условно для ИТ проекта.</li></ul><p>Фактическое согласование в ИИС ДО не проводилось.</p></div>}
     </div>
   </aside>
 }
+

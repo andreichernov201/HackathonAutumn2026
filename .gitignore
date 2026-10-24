@@ -1,4 +1,11 @@
 node_modules
+data/
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.tsbuildinfo
 dist
 .DS_Store
 *.tsbuildinfo
@@ -8,3 +15,4 @@ dist
 .idea
 .vscode
 coverage
+
