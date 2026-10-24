@@ -1,5 +1,6 @@
 import os
 import secrets
+import sqlite3
 from uuid import uuid4
 from pathlib import Path
 from uuid import UUID
@@ -22,7 +23,10 @@ from .knowledge import tools as knowledge_tools
 from .tool_registry import ToolRegistry
 from .knowledge.seed import import_case_sources
 
-app = FastAPI(title='Regula AI API', version='0.2.0', docs_url='/api/docs', openapi_url='/api/openapi.json', redoc_url=None)
+_production = os.getenv('REGULA_ENV') == 'production'
+app = FastAPI(title='Regula AI API', version='0.2.0',
+              docs_url=None if _production else '/api/docs',
+              openapi_url=None if _production else '/api/openapi.json', redoc_url=None)
 secret = session_secret()
 service = DocumentsService(Path(os.getenv('REGULA_DATA_DIR', './data')))
 app.add_middleware(RequestSizeLimitMiddleware)
@@ -83,6 +87,19 @@ def error(exc: ValueError):
 @app.get('/api/health')
 def health():
     return {'status': 'ok', 'model': 'not_configured'}
+
+
+@app.get('/api/ready')
+def ready():
+    """Confirm the persistent database is readable without exposing its contents."""
+    try:
+        with sqlite3.connect(f'file:{service.db_path}?mode=ro', uri=True, timeout=2) as db:
+            db.execute('SELECT 1 FROM sqlite_master LIMIT 1').fetchone()
+        if not service.root.is_dir():
+            raise OSError('data directory unavailable')
+    except (sqlite3.Error, OSError):
+        raise HTTPException(503, 'not_ready')
+    return {'status': 'ready'}
 
 
 @app.get('/api/session')
@@ -281,3 +298,4 @@ def all_tools(user=Depends(actor)):
 @app.post('/api/tools/{tool_name}/invoke')
 def invoke_registered_tool(tool_name: str, call: ToolCall, user=Depends(mutation)):
     return tool_registry.invoke(tool_name, call.arguments, user)
+

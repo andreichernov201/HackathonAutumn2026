@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Cold, consistent volume snapshot; run as root via systemd timer.
+set -Eeuo pipefail
+umask 077
+exec 9>/run/lock/regula-rollout.lock
+flock -n 9 || exit 1
+ROOT=/opt/regula
+CONFIG=/etc/regula/regula.env
+BACKUPS=/var/backups/regula
+sha=$(cat "$ROOT/current.sha")
+[[ $sha =~ ^[a-f0-9]{40}$ ]] || exit 2
+volume=$(sed -n 's/^REGULA_DATA_VOLUME=//p' "$CONFIG" | tail -1)
+[[ $volume =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || exit 2
+mount=$(docker volume inspect -f '{{.Mountpoint}}' "$volume")
+[[ -f $mount/documents.sqlite3 ]] || exit 2
+install -d -m 0700 "$BACKUPS"
+temp=$(mktemp -d "$BACKUPS/.snapshot.XXXXXXXX")
+stopped=no
+compose() {
+  docker compose --project-directory "$ROOT/releases/$sha" \
+    --env-file "$CONFIG" --env-file "$ROOT/releases/$sha/images.env" \
+    -f "$ROOT/releases/$sha/compose.yaml" \
+    -f "$ROOT/releases/$sha/compose.production.yaml" "$@"
+}
+cleanup() {
+  if [[ $stopped == yes ]]; then compose up -d --no-build --wait --wait-timeout 180 --pull never || true; fi
+  rm -rf "$temp"
+}
+trap cleanup EXIT
+stopped=yes
+compose stop -t 60 web api
+python3 - "$mount/documents.sqlite3" "$temp/documents.sqlite3" <<'PY'
+import sqlite3, sys
+source = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True)
+snapshot = sqlite3.connect(sys.argv[2])
+source.backup(snapshot)
+assert snapshot.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+snapshot.close()
+source.close()
+PY
+tar -C "$mount" --exclude='./documents.sqlite3' \
+  --exclude='./documents.sqlite3-wal' --exclude='./documents.sqlite3-shm' \
+  -cf "$temp/data.tar" .
+tar -C "$temp" -rf "$temp/data.tar" documents.sqlite3
+gzip -1 "$temp/data.tar"
+install -d -m 0700 "$temp/verify"
+tar -xzf "$temp/data.tar.gz" -C "$temp/verify"
+python3 - "$temp/verify/documents.sqlite3" <<'PY'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+PY
+name="$(date -u +%Y%m%dT%H%M%SZ)-$sha.tar.gz"
+mv "$temp/data.tar.gz" "$BACKUPS/$name"
+sha256sum "$BACKUPS/$name" > "$BACKUPS/$name.sha256"
+compose up -d --no-build --wait --wait-timeout 180 --pull never
+stopped=no
+if [[ -r /etc/regula/restic.env ]]; then
+  # Root-owned file contains RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE.
+  set -a
+  source /etc/regula/restic.env
+  set +a
+  restic backup "$BACKUPS/$name" "$BACKUPS/$name.sha256"
+fi
+echo "verified local backup: $BACKUPS/$name"

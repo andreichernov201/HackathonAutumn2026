@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Install root-owned as /usr/local/sbin/regula-rollout. No arbitrary shell input is sourced.
+set -Eeuo pipefail
+umask 077
+
+ROOT=/opt/regula
+CONFIG=/etc/regula/regula.env
+LOCK=/run/lock/regula-rollout.lock
+exec 9>"$LOCK"
+flock -n 9 || { echo "another rollout is active" >&2; exit 1; }
+[[ $EUID == 0 ]] || { echo "run through sudo" >&2; exit 1; }
+[[ -f $CONFIG ]] || { echo "missing $CONFIG" >&2; exit 1; }
+
+valid_sha() { [[ $1 =~ ^[a-f0-9]{40}$ ]]; }
+compose() {
+  local sha=$1
+  valid_sha "$sha" || exit 2
+  docker compose --project-directory "$ROOT/releases/$sha" \
+    --env-file "$CONFIG" --env-file "$ROOT/releases/$sha/images.env" \
+    -f "$ROOT/releases/$sha/compose.yaml" \
+    -f "$ROOT/releases/$sha/compose.production.yaml" "${@:2}"
+}
+check_https() {
+  local domain code
+  domain=$(sed -n 's/^DOMAIN=//p' "$CONFIG" | tail -1)
+  [[ $domain =~ ^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$ ]] || return 1
+  for _ in {1..18}; do
+    code=$(curl -sS --max-time 5 --resolve "$domain:443:127.0.0.1" \
+      -o /dev/null -w '%{http_code}' "https://$domain/api/health" 2>/dev/null || true)
+    [[ $code == 401 ]] && return 0
+    sleep 5
+  done
+  echo "HTTPS gate did not return 401 with a trusted certificate" >&2
+  return 1
+}
+start() {
+  local sha=$1 pull=$2
+  if [[ $pull == yes ]]; then
+    compose "$sha" pull
+  fi
+  compose "$sha" up -d --no-build --wait --wait-timeout 180 \
+    --pull "$([[ $pull == yes ]] && echo missing || echo never)"
+  check_https
+}
+
+case "${1:-}" in
+  deploy)
+    [[ $# == 3 ]] || exit 2
+    sha=$2
+    actor=$3
+    valid_sha "$sha" || exit 2
+    [[ $actor =~ ^[A-Za-z0-9-]{1,39}$ ]] || exit 2
+    incoming="/home/regula-deploy/incoming/$sha"
+    for file in compose.yaml compose.production.yaml Caddyfile images.env; do
+      [[ -f "$incoming/$file" && ! -L "$incoming/$file" ]] || exit 2
+    done
+    api=$(sed -n 's/^REGULA_API_IMAGE=//p' "$incoming/images.env")
+    web=$(sed -n 's/^REGULA_WEB_IMAGE=//p' "$incoming/images.env")
+    [[ $api =~ ^ghcr\.io/andreichernov201/hackathonautumn2026-api@sha256:[a-f0-9]{64}$ ]] || exit 2
+    [[ $web =~ ^ghcr\.io/andreichernov201/hackathonautumn2026-web@sha256:[a-f0-9]{64}$ ]] || exit 2
+    install -d -m 0700 "$ROOT/releases/$sha"
+    for file in compose.yaml compose.production.yaml Caddyfile; do
+      install -m 0644 "$incoming/$file" "$ROOT/releases/$sha/$file"
+    done
+    printf 'REGULA_API_IMAGE=%s\nREGULA_WEB_IMAGE=%s\n' "$api" "$web" > "$ROOT/releases/$sha/images.env"
+    previous=''
+    [[ ! -f "$ROOT/current.sha" ]] || previous=$(cat "$ROOT/current.sha")
+    IFS= read -r registry_token || exit 2
+    [[ ${#registry_token} -ge 20 ]] || exit 2
+    export DOCKER_CONFIG
+    DOCKER_CONFIG=$(mktemp -d /run/regula-docker.XXXXXXXX)
+    printf '%s' "$registry_token" | docker login ghcr.io -u "$actor" --password-stdin >/dev/null
+    unset registry_token
+    trap 'docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+    if ! start "$sha" yes; then
+      echo "deploy failed; restoring previous release" >&2
+      if [[ -n $previous ]]; then start "$previous" no || true; fi
+      exit 1
+    fi
+    if [[ -n $previous && $previous != "$sha" ]]; then printf '%s\n' "$previous" > "$ROOT/previous.sha"; fi
+    printf '%s\n' "$sha" > "$ROOT/current.sha"
+    echo "deployed $sha"
+    ;;
+  rollback)
+    [[ $# == 1 ]] || exit 2
+    [[ -s "$ROOT/previous.sha" && -s "$ROOT/current.sha" ]] || exit 2
+    target=$(cat "$ROOT/previous.sha")
+    current=$(cat "$ROOT/current.sha")
+    valid_sha "$target" && valid_sha "$current" || exit 2
+    start "$target" no
+    printf '%s\n' "$current" > "$ROOT/previous.sha"
+    printf '%s\n' "$target" > "$ROOT/current.sha"
+    echo "rolled back to $target"
+    ;;
+  *) echo "usage: regula-rollout deploy SHA GITHUB_ACTOR | rollback" >&2; exit 2 ;;
+esac
