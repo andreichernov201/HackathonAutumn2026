@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 import zipfile
@@ -9,6 +10,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from .models import Artifact, DocumentProject, FieldSpec, Template, Validation, ValidationIssue
+from .module_renderers import preview as preview_module, render as render_module
+from .template_schemas import SCHEMAS
 from .working_group import render as render_working_group
 
 TEMPLATE_ID = 'working-group-order'
@@ -42,6 +45,7 @@ FIELDS = [
     FieldSpec(key='accessLevel', label='Уровень доступа', section='Подписант и карточка'),
     FieldSpec(key='attachments', label='Приложения при наличии', section='Подписант и карточка', required=False, multiline=True),
 ]
+FIELDS_BY_TEMPLATE = {TEMPLATE_ID: FIELDS, **SCHEMAS}
 
 def now(): return datetime.now(timezone.utc).isoformat()
 
@@ -62,11 +66,18 @@ class DocumentsService:
                 digest = hashlib.sha256(source.read_bytes()).hexdigest()
                 stored = root / 'templates' / f'{digest}.docx'
                 if not stored.exists(): shutil.copyfile(source, stored)
-                status = 'ready' if template_id == TEMPLATE_ID else 'awaiting_schema'
+                if template_id == TEMPLATE_ID:
+                    status = 'ready'
+                else:
+                    try:
+                        preview_module(template_id, source.read_bytes(), {})
+                        status = 'ready'
+                    except ValueError:
+                        status = 'awaiting_schema'
                 version = f'sha256:{digest}'
                 db.execute('INSERT OR IGNORE INTO templates VALUES (?,?,?,?,?,?)', (template_id, version, status, filename, digest, None))
-                if template_id == TEMPLATE_ID:
-                    db.execute("UPDATE templates SET version=?, status='ready', filename=?, sha=? WHERE id=? AND status='awaiting_source'", (version, filename, digest, template_id))
+                if status == 'ready':
+                    db.execute("UPDATE templates SET version=?, status='ready', filename=?, sha=? WHERE id=? AND status IN ('awaiting_source','awaiting_schema') AND sha=?", (version, filename, digest, template_id, digest))
 
     def db(self):
         db = sqlite3.connect(self.db_path)
@@ -78,8 +89,11 @@ class DocumentsService:
         if not metadata: return None
         with self.db() as db:
             row = db.execute('SELECT * FROM templates WHERE id=?', (template_id,)).fetchone()
-        note = ('Исходный синтетический DOCX загружен. Схема заполнения проверена по модулю и методическим рекомендациям.' if template_id == TEMPLATE_ID else 'Исходный синтетический DOCX загружен; схема полей и генератор ещё не подготовлены.')
-        return Template(templateId=template_id, title=metadata[1], kind=metadata[2], templateVersion=row['version'], sourceStatus=row['status'], registryStatus='unverified', sourceFilename=row['filename'], sourceSha256=row['sha'], fields=FIELDS if template_id == TEMPLATE_ID else [], note=note)
+        note = ('Исходный синтетический DOCX загружен. Черновик формируется из копии модуля; статус в реестре не проверен.'
+                if row['status'] == 'ready' else 'Исходный DOCX загружен, но его структура требует проверки перед генерацией.')
+        if template_id == 'local-act-order':
+            note += ' Приложение к приказу необходимо подготовить и приложить отдельно.'
+        return Template(templateId=template_id, title=metadata[1], kind=metadata[2], templateVersion=row['version'], sourceStatus=row['status'], registryStatus='unverified', sourceFilename=row['filename'], sourceSha256=row['sha'], fields=FIELDS_BY_TEMPLATE[template_id], note=note)
 
     def list_templates(self): return [self.template(item[0]) for item in CATALOG]
 
@@ -89,14 +103,34 @@ class DocumentsService:
         if template.sourceStatus != 'ready': raise ValueError('template_schema_not_ready')
         project_id, ts = str(uuid4()), now()
         with self.db() as db:
-            db.execute('INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?,?)', (project_id, owner, template_id, template.templateVersion, title.strip() or 'Новый проект распоряжения', '{}', 'draft', 1, ts, ts))
+            db.execute('INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?,?)', (project_id, owner, template_id, template.templateVersion, title.strip() or f'Проект: {template.title}', '{}', 'draft', 1, ts, ts))
         return self.get(owner, project_id)
 
     def _validation(self, fields: dict[str,str], template: Template, project_version: str | None) -> Validation:
         issues = [ValidationIssue(code='required', field=spec.key, message=f'Заполните поле «{spec.label}»') for spec in template.fields if spec.required and not fields.get(spec.key, '').strip()]
-        if fields.get('deadline'):
-            try: date.fromisoformat(fields['deadline'])
-            except ValueError: issues.append(ValidationIssue(code='invalid_date', field='deadline', message='Укажите корректную дату срока'))
+        for spec in template.fields:
+            raw = fields.get(spec.key, '').strip()
+            if not raw: continue
+            if spec.inputType == 'date':
+                try: date.fromisoformat(raw)
+                except ValueError: issues.append(ValidationIssue(code='invalid_date', field=spec.key, message=f'Укажите корректную дату: {spec.label}'))
+            if spec.options and raw not in spec.options:
+                issues.append(ValidationIssue(code='invalid_option', field=spec.key, message=f'Выберите допустимое значение: {spec.label}'))
+            if re.search(r'\[|\]|_{3,}|МОДУЛЬНЫЙ ДОКУМЕНТ', raw):
+                issues.append(ValidationIssue(code='placeholder_syntax', field=spec.key, message=f'Уберите подсказки и квадратные скобки из поля «{spec.label}»'))
+        if template.templateId == 'project-committee-order' and any(fields.get(key, '').strip() for key in ('cancelDate','cancelNumber','cancelTitle')):
+            for key in ('cancelDate','cancelNumber','cancelTitle'):
+                if not fields.get(key, '').strip():
+                    issues.append(ValidationIssue(code='conditional_required', field=key, message='Для отмены заполните дату, номер и название прежнего распоряжения'))
+        if template.templateId == 'records-officers-order' and fields.get('appointees', '').strip():
+            lines = [line.strip() for line in fields['appointees'].splitlines() if line.strip()]
+            if any('|' not in line or not all(part.strip() for part in line.split('|', 1)) for line in lines):
+                issues.append(ValidationIssue(code='invalid_appointees', field='appointees', message='Каждая строка: подразделение | должность, инициалы и фамилия'))
+        for earlier, later in ({'internal-audit-order': [('startDate','endDate'),('endDate','reportDate')], 'system-commissioning-order': [('readinessDate','effectiveDate')]}.get(template.templateId, [])):
+            try:
+                if date.fromisoformat(fields[earlier]) > date.fromisoformat(fields[later]):
+                    issues.append(ValidationIssue(code='date_order', field=later, message='Срок не может быть раньше предыдущей даты'))
+            except (KeyError, ValueError): pass
         if template.sourceStatus != 'ready': issues.append(ValidationIssue(code='source_not_ready', message='Схема исходного DOCX не готова'))
         if project_version != template.templateVersion: issues.append(ValidationIssue(code='template_version_changed', message='Версия исходного модуля изменилась. Создайте новый проект из текущей версии.'))
         total = sum(spec.required for spec in template.fields)
@@ -107,10 +141,19 @@ class DocumentsService:
         fields = json.loads(row['fields'])
         with self.db() as db:
             artifacts = [Artifact(artifactId=a['id'], projectVersion=a['project_version'], createdAt=a['created'], filename=a['filename'], sha256=a['sha']) for a in db.execute('SELECT * FROM artifacts WHERE project_id=? ORDER BY created DESC', (row['id'],))]
-        sections = self.preview(fields)
+        sections = self.preview(row['template_id'], fields)
         return DocumentProject(projectId=row['id'], templateId=row['template_id'], templateVersion=row['template_version'], title=row['title'], fields=fields, status=row['status'], version=row['version'], createdAt=row['created'], updatedAt=row['updated'], sourceStatus=template.sourceStatus, validation=self._validation(fields, template, row['template_version']), artifacts=artifacts, preview=sections)
 
-    def preview(self, fields: dict[str,str]):
+    def preview(self, template_id: str, fields: dict[str,str]):
+        if template_id != TEMPLATE_ID:
+            template = self.template(template_id)
+            source = (self.root/'templates'/f'{template.sourceSha256}.docx').read_bytes()
+            try:
+                return preview_module(template_id, source, fields)
+            except ValueError as exc:
+                if str(exc) in ('invalid_appointees', 'unresolved_placeholders'):
+                    return [{'section':'Проверка', 'label':'Предпросмотр', 'value':'Исправьте отмеченные поля для просмотра проекта документа.'}]
+                raise
         def v(key): return fields.get(key, '').strip() or '…'
         deadline = fields.get('deadline', '')
         try:
@@ -140,7 +183,10 @@ class DocumentsService:
         return [self._project(row) for row in rows]
 
     def patch(self, owner: str, project_id: str, expected: int, fields: dict[str,str], title: str | None):
-        allowed = {f.key for f in FIELDS}
+        with self.db() as db:
+            current = db.execute('SELECT template_id FROM projects WHERE id=? AND owner=?', (project_id, owner)).fetchone()
+        if not current: return None
+        allowed = {f.key for f in FIELDS_BY_TEMPLATE[current['template_id']]}
         if any(key not in allowed or not isinstance(value,str) or len(value)>4000 for key,value in fields.items()): raise ValueError('invalid_fields')
         with self.db() as db:
             row = db.execute('SELECT * FROM projects WHERE id=? AND owner=?', (project_id, owner)).fetchone()
@@ -192,13 +238,13 @@ class DocumentsService:
         with self.db() as db:
             template = db.execute('SELECT * FROM templates WHERE id=?', (project.templateId,)).fetchone()
         source = (self.root/'templates'/f"{template['sha']}.docx").read_bytes()
-        content = render_working_group(source, project.fields)
+        content = render_working_group(source, project.fields) if project.templateId == TEMPLATE_ID else render_module(project.templateId, source, project.fields)
         artifact_id = str(uuid4())
         (self.root/'artifacts').mkdir(exist_ok=True)
         path = self.root/'artifacts'/f'{artifact_id}.docx'
         path.write_bytes(content)
         digest = hashlib.sha256(content).hexdigest()
-        filename = f'proekt-rasporyazheniya-v{project.version}.docx'
+        filename = f'proekt-{project.templateId}-v{project.version}.docx'
         try:
             with self.db() as db:
                 result = db.execute("UPDATE projects SET status='generated' WHERE id=? AND owner=? AND version=?", (project_id, owner, project.version))

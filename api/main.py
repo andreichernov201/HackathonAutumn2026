@@ -115,12 +115,16 @@ def update_fields(project_id: str, body: PatchFields, user=Depends(mutation)):
 @app.post('/api/document-projects/{project_id}/preview')
 def preview_project(project_id: str, body: PreviewFields, user=Depends(mutation)):
     project_or_404(user, project_id)
-    allowed = {spec.key for spec in service.template(TEMPLATE_ID).fields}
+    project = project_or_404(user, project_id)
+    allowed = {spec.key for spec in service.template(project.templateId).fields}
     if any(key not in allowed or len(value) > 4000 for key, value in body.fields.items()):
         raise HTTPException(422, 'invalid_fields')
-    project = project_or_404(user, project_id)
     template = service.template(project.templateId)
-    return {'preview': service.preview(body.fields), 'validation': service._validation(body.fields, template, project.templateVersion)}
+    try:
+        preview = service.preview(project.templateId, body.fields)
+    except ValueError as exc:
+        error(exc)
+    return {'preview': preview, 'validation': service._validation(body.fields, template, project.templateVersion)}
 
 @app.post('/api/document-projects/{project_id}/validate', response_model=DocumentProject)
 def validate_project(project_id: str, user=Depends(mutation)):
