@@ -5,3 +5,5 @@ python-multipart==0.0.20
 itsdangerous==2.2.0
 pytest==8.3.5
 httpx==0.28.1
+PyMuPDF==1.25.5
+snowballstemmer==3.0.1

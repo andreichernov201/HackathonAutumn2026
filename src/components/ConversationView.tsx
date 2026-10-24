@@ -30,7 +30,7 @@ export function ConversationView({ session, onSource, onStartDocument }: Props) 
           </div>
         ))}
       </div>
-      {!session.messages.some((message) => message.role === 'assistant') && <div className="integration-note"><span className="note-icon"><CircleHelp size={18} /></span><div><strong>Демосценарий</strong><p>Чат пока отвечает по выдержкам из кейса. Документы создаются в отдельном серверном редакторе.</p></div></div>}
+      {!session.messages.some((message) => message.role === 'assistant') && <div className="integration-note"><span className="note-icon"><CircleHelp size={18} /></span><div><strong>Источники из базы знаний</strong><p>Поиск использует оригинальные материалы. AI-анализ требует подключения отдельного сервиса.</p></div></div>}
       <div ref={endRef} />
     </div>
   </div>

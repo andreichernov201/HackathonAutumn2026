@@ -1,3 +1,4 @@
+import type { KnowledgeCitation } from '../knowledge/types'
 export type Scenario = 'requirement' | 'document' | 'file-check' | 'approval'
 export interface FileReference { name: string; size: number; type: string }
 export type WorkspaceTab = 'sources' | 'document' | 'route'
@@ -7,8 +8,14 @@ export interface SourceReference {
   title: string
   locator: string
   excerpt: string
-  provenance: 'case-excerpt'
+  provenance: 'case-excerpt' | 'knowledge'
   originalUrl?: string
+  documentId?: string
+  versionId?: string
+  sectionId?: string
+  versionLabel?: string | null
+  sourceReference?: string
+  checksum?: string
 }
 export type ChatBlock =
   | { type: 'citation'; sourceId: string; note?: string }
@@ -34,6 +41,7 @@ export interface ChatSession {
   documentProjectId?: string
   sources?: SourceReference[]
   workspace?: WorkspaceState
+  knowledgeSource?: KnowledgeCitation
 }
 // Same-origin JSON contract for future FastAPI POST /api/chat.
 // File content needs a separate authenticated upload flow.
@@ -42,7 +50,7 @@ export interface ChatRequest {
   message: string
   scenario?: Scenario
   history: ChatMessage[]
-  context: { documentProjectId?: string; workspace: WorkspaceState; file?: FileReference }
+  context: { documentProjectId?: string; workspace: WorkspaceState; file?: FileReference; knowledgeSource?: KnowledgeCitation }
 }
 export type ChatResult =
   | { status: 'completed'; conversationId: string; text: string; blocks: ChatBlock[]; sources: SourceReference[]; workspace?: WorkspaceState; origin: 'demo' | 'api' }

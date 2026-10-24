@@ -37,7 +37,7 @@ export function Composer({ inputRef, draft, file, scenario, submitting, onDraft,
         <button className="send-button" type="submit" aria-label="Отправить запрос" title="Отправить запрос" disabled={(!draft.trim() && !file) || submitting}><Send size={19} fill="currentColor" strokeWidth={1.6} /></button>
       </div>
     </form>
-    <p className="composer-caption"><Check size={13} />Чат использует демо выдержки. DOCX формируется отдельно в разделе «Документы»; согласование не подключено.</p>
+    <p className="composer-caption"><Check size={13} />Поиск по базе знаний работает локально. AI-анализ и фактическое согласование пока не подключены.</p>
   </div>
 }
 
