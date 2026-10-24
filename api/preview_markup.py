@@ -24,7 +24,7 @@ class DraftFields(dict):
             label = re.split(r'\s*[:(]', self.labels.get(key, key), maxsplit=1)[0].strip()
             text = placeholder or 'Укажите: ' + label
         token = str(len(self.tokens))
-        self.tokens[token] = MISSING_FILL if missing else FILLED_FILL
+        self.tokens[token] = (key, MISSING_FILL if missing else FILLED_FILL)
         return f'{self.prefix}{token}\ue001{text}\ue002'
 
 
@@ -55,12 +55,13 @@ def finish_preview(document, fields):
             segments.append((match.group(2), fields.tokens[match.group(1)]))
             offset = match.end()
         segments.append((run.text[offset:], None))
-        for text, fill in segments:
+        for text, marker in segments:
             if not text:
                 continue
             new = Run(deepcopy(element), None)
             new.text = text
-            if fill:
+            if marker:
+                key, fill = marker
                 properties = new._r.get_or_add_rPr()
                 for prior in list(properties.findall(qn('w:shd'))):
                     properties.remove(prior)
@@ -68,5 +69,15 @@ def finish_preview(document, fields):
                 shading.set(qn('w:val'), 'clear')
                 shading.set(qn('w:fill'), fill)
                 properties.append(shading)
-            element.addprevious(new._r)
+            if marker:
+                bookmark = OxmlElement('w:bookmarkStart')
+                bookmark.set(qn('w:id'), str(100000 + len(list(document.element.iter(qn('w:bookmarkStart'))))))
+                bookmark.set(qn('w:name'), f'regula_field_{key}_{bookmark.get(qn("w:id"))}')
+                element.addprevious(bookmark)
+                element.addprevious(new._r)
+                end = OxmlElement('w:bookmarkEnd')
+                end.set(qn('w:id'), bookmark.get(qn('w:id')))
+                element.addprevious(end)
+            else:
+                element.addprevious(new._r)
         element.getparent().remove(element)

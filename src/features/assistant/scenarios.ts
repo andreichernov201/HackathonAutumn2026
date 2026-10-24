@@ -14,7 +14,7 @@ export const scenarios: Record<Scenario, { title: string; prompt: string; descri
   'file-check': {
     title: 'Проверить файл',
     prompt: 'Проверь прикреплённый файл: ',
-    description: 'Сервис проверки пока не подключён',
+    description: 'Открыть оригинал PDF или DOCX',
   },
   approval: {
     title: 'Требования визирования',
@@ -22,5 +22,3 @@ export const scenarios: Record<Scenario, { title: string; prompt: string; descri
     description: 'Подразделения по матрице, без маршрута',
   },
 }
-
-

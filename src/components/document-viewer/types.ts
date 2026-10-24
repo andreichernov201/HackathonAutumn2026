@@ -1,4 +1,15 @@
 import type { ReactNode, Ref } from 'react'
+import type { FieldSpec } from '../../features/documents/types'
+
+export interface DocumentFieldEditing {
+  specs: FieldSpec[]
+  values: Record<string, string>
+  onChange: (key: string, value: string) => void
+  onSelect: (key: string) => void
+  onEditing: (editing: boolean) => void
+  onConstraintError?: (message: string) => void
+  onSave: () => void
+}
 
 export type ViewerMode = 'knowledge' | 'editor' | 'review'
 export type DocumentFormat = 'pdf' | 'docx'
@@ -22,17 +33,29 @@ export interface DocumentAnnotation {
   sourceReference?: string
   metadata?: Record<string, string>
   /** Optional visual hint, independent of the semantic location; normalized PDF coordinates. */
-  visual?: {page: number; rects: Array<{x: number; y: number; width: number; height: number}>}
+  visual?: {
+    page: number
+    rects: Array<{ x: number; y: number; width: number; height: number }>
+  }
 }
-export interface NavigationResult { exact: boolean; page?: number; message?: string }
+export interface NavigationResult {
+  exact: boolean
+  page?: number
+  message?: string
+}
 export interface DocumentViewerHandle {
   goToPage(page: number): Promise<NavigationResult>
   goToLocation(location: DocumentLocation): Promise<NavigationResult>
   highlightAnnotation(annotation: DocumentAnnotation): Promise<NavigationResult>
   clearHighlight(): void
 }
-export interface ViewerTools { search?: boolean; download?: boolean; fullscreen?: boolean }
+export interface ViewerTools {
+  search?: boolean
+  download?: boolean
+  fullscreen?: boolean
+}
 export interface DocumentViewerProps {
+  fieldEditing?: DocumentFieldEditing
   source: DocumentSource
   filename?: string
   format?: DocumentFormat
@@ -45,17 +68,23 @@ export interface DocumentViewerProps {
   tools?: ViewerTools
   toolbarExtra?: ReactNode
   className?: string
-  onReady?: (info: {format: DocumentFormat; pages: number}) => void
+  onReady?: (info: { format: DocumentFormat; pages: number }) => void
   onLocationChange?: (location: DocumentLocation) => void
   onError?: (message: string) => void
   ref?: Ref<DocumentViewerHandle>
 }
-export interface SearchState {current: number; total: number; busy: boolean; searched: boolean}
+export interface SearchState {
+  current: number
+  total: number
+  busy: boolean
+  searched: boolean
+}
 export interface ViewerEngine extends DocumentViewerHandle {
   search(query: string): void
   nextMatch(backward?: boolean): void
 }
 export interface EngineProps {
+  fieldEditing?: DocumentFieldEditing
   blob: Blob
   scrollRef: React.RefObject<HTMLDivElement | null>
   zoom: number | 'width'

@@ -18,6 +18,7 @@ from .session import SESSION_MAX_AGE, write_session_cookie
 from .models import ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
 from .service import DocumentsService, TEMPLATE_ID
 from .preview_service import DOCX_MIME
+from .editor import EditorOperation, EditorService
 from .knowledge.service import KnowledgeService, KnowledgeError
 from .knowledge.router import build_router, principal_for
 from .knowledge import tools as knowledge_tools
@@ -319,3 +320,21 @@ def all_tools(user=Depends(actor)):
 def invoke_registered_tool(tool_name: str, call: ToolCall, user=Depends(mutation)):
     return tool_registry.invoke(tool_name, call.arguments, user)
 
+
+
+# Additive editor endpoints; the existing project and export API remain compatible.
+
+@app.get('/api/document-projects/{project_id}/editor')
+def editor_model(project_id: str, user=Depends(actor)):
+    project_or_404(user, project_id)
+    return EditorService(service, knowledge_service).model(user['deviceId'], project_id)
+
+@app.post('/api/document-projects/{project_id}/operations')
+def editor_operation(project_id: str, body: EditorOperation, user=Depends(mutation)):
+    project_or_404(user, project_id)
+    if body.document_id != project_id:
+        raise HTTPException(422, 'document_id_mismatch')
+    try:
+        return EditorService(service, knowledge_service).apply(user['deviceId'], body)
+    except ValueError as exc:
+        error(exc)

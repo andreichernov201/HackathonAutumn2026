@@ -5,8 +5,10 @@ import type { AssistantGateway } from './types'
 export const demoGateway: AssistantGateway = {
   async submit(request) {
     return {
-      status: 'not-configured', conversationId: request.conversationId,
-      message: 'Проверка файлов пока не подключена: содержимое выбранного файла не загружено и не прочитано. Qwen не подключена. Поиск по оригиналам доступен в разделе «База знаний».',
+      status: 'not-configured',
+      conversationId: request.conversationId,
+      message:
+        'Файл не был проанализирован. Откройте его в разделе «Проверка» для чтения и сопоставьте с источниками базы знаний.',
     }
   },
 }

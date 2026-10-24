@@ -60,6 +60,7 @@ class DocumentsService:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS templates (id TEXT PRIMARY KEY, version TEXT, status TEXT NOT NULL, filename TEXT, sha TEXT, mapping TEXT);
             CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner TEXT NOT NULL, template_id TEXT NOT NULL, template_version TEXT, title TEXT NOT NULL, fields TEXT NOT NULL, status TEXT NOT NULL, version INTEGER NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS document_history (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, version INTEGER NOT NULL, operation TEXT NOT NULL, payload TEXT NOT NULL, created TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, owner TEXT NOT NULL, project_version INTEGER NOT NULL, created TEXT NOT NULL, filename TEXT NOT NULL, sha TEXT NOT NULL);
             ''')
             for template_id, _, _, filename in CATALOG:
@@ -198,6 +199,8 @@ class DocumentsService:
             if merged != json.loads(row['fields']) or next_title != row['title']:
                 result = db.execute('UPDATE projects SET fields=?, title=?, status=?, version=version+1, updated=? WHERE id=? AND owner=? AND version=?', (json.dumps(merged, ensure_ascii=False), next_title, 'draft', now(), project_id, owner, expected))
                 if result.rowcount != 1: raise ValueError('version_conflict')
+                payload = {'before': json.loads(row['fields']), 'fields': merged, 'title_before': row['title'], 'title': next_title}
+                db.execute('INSERT INTO document_history VALUES (?,?,?,?,?,?)', (str(uuid4()), project_id, expected + 1, 'save_fields', json.dumps(payload, ensure_ascii=False), now()))
         return self.get(owner, project_id)
 
     def preview_file(self, owner: str, project_id: str, fields: dict[str, str]):

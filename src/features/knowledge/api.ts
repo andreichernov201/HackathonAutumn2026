@@ -1,26 +1,50 @@
 import { request, session } from '../../shared/http'
-import type { KnowledgeDocument, KnowledgeSection, KnowledgeSession, KnowledgeVersion, Page, SearchHit, SectionSummary } from './types'
+import type {
+  KnowledgeDocument,
+  KnowledgeSection,
+  KnowledgeSession,
+  KnowledgeVersion,
+  Page,
+  SearchHit,
+  SectionSummary,
+} from './types'
 
-export type Filters = {category: string; status: string; fileType: string; sort: string}
+export type Filters = { category: string; status: string; fileType: string; sort: string }
 function params(values: Record<string, string | number>) {
   const result = new URLSearchParams()
-  Object.entries(values).forEach(([key, value]) => {if (value !== '') result.set(key, String(value))})
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== '') result.set(key, String(value))
+  })
   return result.toString()
 }
 export const knowledgeApi = {
-  async session() {await session(); return request<KnowledgeSession>('/api/knowledge/session')},
-  list: (filters: Filters, offset = 0, q = '', signal?: AbortSignal) => request<Page<KnowledgeDocument>>('/api/knowledge/documents?' + params({...filters, q, offset, limit: 20}), {signal}),
-  search: (q: string, filters: Filters, offset = 0, signal?: AbortSignal) => {
-    const {sort: _sort, ...rest} = filters
-    return request<Page<SearchHit> & {message: string | null}>('/api/knowledge/search?' + params({...rest, q, offset, limit: 20}), {signal})
+  async session() {
+    await session()
+    return request<KnowledgeSession>('/api/knowledge/session')
   },
-  get: (id: string, signal?: AbortSignal) => request<KnowledgeDocument>(`/api/knowledge/documents/${encodeURIComponent(id)}`, {signal}),
+  list: (filters: Filters, offset = 0, q = '', signal?: AbortSignal) =>
+    request<Page<KnowledgeDocument>>('/api/knowledge/documents?' + params({ ...filters, q, offset, limit: 20 }), {
+      signal,
+    }),
+  search: (q: string, filters: Filters, offset = 0, signal?: AbortSignal) => {
+    const { sort: _sort, ...rest } = filters
+    return request<Page<SearchHit> & { message: string | null }>(
+      '/api/knowledge/search?' + params({ ...rest, q, offset, limit: 20 }),
+      { signal },
+    )
+  },
+  get: (id: string, signal?: AbortSignal) =>
+    request<KnowledgeDocument>(`/api/knowledge/documents/${encodeURIComponent(id)}`, { signal }),
   async versions(id: string, signal?: AbortSignal) {
     const items: KnowledgeVersion[] = []
     let offset = 0
     while (true) {
-      const page = await request<Page<KnowledgeVersion>>(`/api/knowledge/documents/${encodeURIComponent(id)}/versions?offset=${offset}`, {signal})
-      items.push(...page.items); offset += page.items.length
+      const page = await request<Page<KnowledgeVersion>>(
+        `/api/knowledge/documents/${encodeURIComponent(id)}/versions?offset=${offset}`,
+        { signal },
+      )
+      items.push(...page.items)
+      offset += page.items.length
       if (offset >= page.total || !page.items.length) return items
     }
   },
@@ -28,19 +52,31 @@ export const knowledgeApi = {
     const items: SectionSummary[] = []
     let offset = 0
     while (true) {
-      const page = await request<Page<SectionSummary>>(`/api/knowledge/versions/${encodeURIComponent(id)}/sections?offset=${offset}`, {signal})
-      items.push(...page.items); offset += page.items.length
+      const page = await request<Page<SectionSummary>>(
+        `/api/knowledge/versions/${encodeURIComponent(id)}/sections?offset=${offset}`,
+        { signal },
+      )
+      items.push(...page.items)
+      offset += page.items.length
       if (offset >= page.total || !page.items.length) return items
     }
   },
-  section: (id: string, signal?: AbortSignal) => request<KnowledgeSection>(`/api/knowledge/sections/${encodeURIComponent(id)}`, {signal}),
+  section: (id: string, signal?: AbortSignal) =>
+    request<KnowledgeSection>(`/api/knowledge/sections/${encodeURIComponent(id)}`, { signal }),
   upload: (file: File, metadata: Record<string, unknown>, documentId?: string) => {
-    const body = new FormData(); body.append('file', file); body.append('metadata', JSON.stringify(metadata))
-    return request<KnowledgeDocument>(documentId ? `/api/knowledge/documents/${encodeURIComponent(documentId)}/versions` : '/api/knowledge/documents', {method: 'POST', body})
+    const body = new FormData()
+    body.append('file', file)
+    body.append('metadata', JSON.stringify(metadata))
+    return request<KnowledgeDocument>(
+      documentId ? `/api/knowledge/documents/${encodeURIComponent(documentId)}/versions` : '/api/knowledge/documents',
+      { method: 'POST', body },
+    )
   },
-  reindex: (id: string) => request<KnowledgeVersion>(`/api/knowledge/versions/${encodeURIComponent(id)}/index`, {method: 'POST'}),
-  login: (token: string) => request('/api/knowledge/admin-session', {method: 'POST', body: JSON.stringify({token})}),
-  logout: () => request('/api/knowledge/admin-session', {method: 'DELETE'}),
+  reindex: (id: string) =>
+    request<KnowledgeVersion>(`/api/knowledge/versions/${encodeURIComponent(id)}/index`, { method: 'POST' }),
+  login: (token: string) =>
+    request('/api/knowledge/admin-session', { method: 'POST', body: JSON.stringify({ token }) }),
+  logout: () => request('/api/knowledge/admin-session', { method: 'DELETE' }),
 }
 
 const errors: Record<string, string> = {
@@ -54,7 +90,7 @@ const errors: Record<string, string> = {
   duplicate_version: 'Такой оригинал уже сохранён в этом документе. Выберите другую редакцию.',
   invalid_file_size: 'Выберите непустой файл размером до 20 МБ.',
   unsupported_file_type: 'Поддерживаются PDF с текстовым слоем, DOCX и TXT в UTF-8.',
-  no_text_layer: 'Текст не найден. Для сканированного PDF требуется OCR, который пока не подключён.',
+  no_text_layer: 'Текст не найден. Загрузите PDF с текстовым слоем.',
   extraction_failed: 'Не удалось извлечь текст. Проверьте файл и его формат.',
   source_integrity_error: 'Контрольная сумма оригинала не совпадает. Обратитесь к администратору.',
   version_metadata_mismatch: 'Редакция должна сохранить категорию, доступ и происхождение документа.',
