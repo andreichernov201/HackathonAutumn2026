@@ -92,6 +92,7 @@ test('unconnected file checking never answers from a second normative corpus', a
 
 test('order command recommends a real DOCX module and opens the created project', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', {name: 'Чаты', exact: true}).click()
   await page.getByRole('textbox', {name: 'Ваш запрос'}).fill('Создай приказ о назначении ответственных за делопроизводство')
   await page.getByRole('button', {name: 'Отправить запрос'}).click()
   const modules = page.getByRole('region', {name: 'Модули DOCX'})
@@ -102,7 +103,39 @@ test('order command recommends a real DOCX module and opens the created project'
   await expect(page.locator('.docs-editor-head')).toBeVisible()
   await expect(page.getByRole('textbox', {name: 'Название проекта'})).toHaveValue(/Приказ о назначении ответственных за делопроизводство/)
   await page.getByRole('button', {name: 'Открыть в чате', exact: true}).click()
-  await expect(page.locator('.message-row.assistant')).toContainText('связь с этим чатом сохранена')
+  await expect(page.getByText(/связь с этим чатом сохранена/)).toBeVisible()
+})
+
+test('working group wizard fills the existing project from the current field schema', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', {name: 'Чаты', exact: true}).click()
+  await page.getByRole('textbox', {name: 'Ваш запрос'}).fill('Создай распоряжение о рабочей группе')
+  await page.getByRole('button', {name: 'Отправить запрос'}).click()
+  const recommended = page.getByRole('region', {name: 'Модули DOCX'}).locator('.template-suggestion.recommended')
+  await expect(recommended).toContainText('Распоряжение о создании рабочей группы')
+  await recommended.getByRole('button', {name: 'Создать и открыть'}).click()
+
+  const wizard = page.getByRole('region', {name: 'Мастер рабочей группы'})
+  await expect(wizard).toContainText('Шаг 1 из 3')
+  await wizard.getByRole('button', {name: 'Да', exact: true}).click()
+  await wizard.getByRole('button', {name: 'Далее'}).click()
+
+  const template = (await (await page.request.get('/api/document-templates')).json()).find((item: {templateId: string}) => item.templateId === 'working-group-order')
+  for (const spec of template.fields.filter((item: {required: boolean}) => item.required)) {
+    const control = wizard.getByLabel(spec.label, {exact: false})
+    if (spec.inputType === 'select') await control.selectOption({index: 1})
+    else await control.fill(spec.inputType === 'date' ? '2026-12-31' : `Мастер ${spec.key}`)
+  }
+  await wizard.getByRole('button', {name: 'Далее'}).click()
+  await expect(wizard).toContainText('Связь с ИТ')
+  await expect(wizard).toContainText('Да')
+  await wizard.getByRole('button', {name: 'Заполнить проект'}).click()
+
+  await expect(page.locator('.docs-editor-head')).toBeVisible()
+  await page.locator('.inspector-field-list [data-field-key="organization"]').click()
+  await expect(page.locator('.field-editor').getByLabel('Наименование организации', {exact: true})).toHaveValue('Мастер organization')
+  await page.getByRole('button', {name: 'Открыть в чате', exact: true}).click()
+  await expect(page.getByRole('region', {name: 'Мастер рабочей группы'})).toContainText('Реквизиты сохранены')
 })
 
 test('generation keeps later edits and downloads a real saved DOCX', async ({ page }) => {

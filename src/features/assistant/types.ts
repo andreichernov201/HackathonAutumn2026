@@ -1,5 +1,5 @@
 import type { KnowledgeCitation } from '../knowledge/types'
-import type { DocumentTemplate } from '../documents/types'
+import type { DocumentTemplate, FieldSpec } from '../documents/types'
 export type Scenario = 'requirement' | 'document' | 'file-check' | 'approval'
 export interface FileReference { name: string; size: number; type: string }
 export type WorkspaceTab = 'sources' | 'document' | 'route'
@@ -24,6 +24,7 @@ export type ChatBlock =
   | { type: 'clarification'; question: string; fields: ('title' | 'chair' | 'projectType')[] }
   | { type: 'document_card'; title: string; status: 'draft' | 'needs-data'; summary: string }
   | { type: 'template_suggestions'; recommendedTemplateId?: string; templates: Pick<DocumentTemplate, 'templateId' | 'title' | 'kind' | 'note' | 'sourceStatus'>[] }
+  | { type: 'working_group_wizard'; projectId: string; projectTitle: string; projectVersion: number; fields: Record<string, string>; fieldSpecs: FieldSpec[]; completed?: boolean }
   | { type: 'validation_result'; outcome: 'pass' | 'needs-review' | 'blocked'; checks: { label: string; detail: string }[] }
 export interface ChatMessage {
   id: string

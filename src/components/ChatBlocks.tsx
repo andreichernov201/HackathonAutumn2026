@@ -1,6 +1,7 @@
 import { ArrowRight, BookOpen, CheckCircle2, CircleHelp, FilePlus2, FileText, ListChecks } from 'lucide-react'
 import { useState } from 'react'
 import type { ChatBlock, SourceReference } from '../features/assistant/types'
+import { WorkingGroupWizard } from './WorkingGroupWizard'
 
 interface Props {
   blocks: ChatBlock[]
@@ -8,9 +9,10 @@ interface Props {
   onSource: (id: string) => void
   onStartDocument: () => void
   onCreateDocument: (templateId: string) => Promise<void>
+  onCompleteWorkingGroup: (projectId: string, expectedVersion: number, fields: Record<string, string>) => Promise<void>
 }
 
-export function ChatBlocks({ blocks, sources, onSource, onStartDocument, onCreateDocument }: Props) {
+export function ChatBlocks({ blocks, sources, onSource, onStartDocument, onCreateDocument, onCompleteWorkingGroup }: Props) {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string>()
   const [createError, setCreateError] = useState('')
   async function create(templateId: string) {
@@ -104,6 +106,7 @@ export function ChatBlocks({ blocks, sources, onSource, onStartDocument, onCreat
             </article>)}</div>
             {createError && <p className="template-create-error" role="alert">{createError}</p>}
           </section>
+        if (block.type === 'working_group_wizard') return <WorkingGroupWizard key={index} projectId={block.projectId} projectTitle={block.projectTitle} projectVersion={block.projectVersion} initialFields={block.fields} fieldSpecs={block.fieldSpecs} completed={block.completed} onComplete={onCompleteWorkingGroup}/>
         return (
           <section key={index} className="result-card">
             <h3>

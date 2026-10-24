@@ -18,10 +18,11 @@ const errors: Record<string, string> = {
 }
 interface Props {
   initialProjectId?: string
+  initialProject?: DocumentProject
   openVersion?: number
   onOpenChat: (project: DocumentProject) => void
 }
-export function DocumentsPage({ initialProjectId, openVersion, onOpenChat }: Props) {
+export function DocumentsPage({ initialProjectId, initialProject, openVersion, onOpenChat }: Props) {
   const [loading, setLoading] = useState(true),
     [templates, setTemplates] = useState<DocumentTemplate[]>([]),
     [projects, setProjects] = useState<DocumentProject[]>([])
@@ -59,7 +60,9 @@ export function DocumentsPage({ initialProjectId, openVersion, onOpenChat }: Pro
       .session()
       .then(async () => {
         await load()
-        if (initialProjectId) {
+        if (initialProject) {
+          if (active) open(initialProject)
+        } else if (initialProjectId) {
           const next = await documentsApi.get(initialProjectId)
           if (active && current.current?.projectId !== next.projectId) open(next)
         }
@@ -71,7 +74,7 @@ export function DocumentsPage({ initialProjectId, openVersion, onOpenChat }: Pro
     return () => {
       active = false
     }
-  }, [initialProjectId, openVersion])
+  }, [initialProjectId, initialProject, openVersion])
   useEffect(() => {
     if (!project || editing) return
     const id = project.projectId,
