@@ -37,6 +37,7 @@ def tool(name, **arguments):
 
 assert b'<html' in request('/')
 assert request('/api/health')['status'] == 'ok'
+assert request('/api/ready')['status'] == 'ready'
 session = request('/api/session')
 csrf = session['csrfToken']
 assert request('/api/knowledge/documents')['total'] == 3
@@ -96,3 +97,4 @@ request('/api/knowledge/admin-session', method='DELETE')
 assert request('/api/session') == session
 assert len(request('/api/document-projects')) == original_project_count + 7
 print('Compose smoke passed: Nginx, shared session/CSRF, 16 tools, 3 originals, 7 DOCX workflows, 20 MiB multipart upload and 413 boundary.')
+
