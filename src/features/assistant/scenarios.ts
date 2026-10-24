@@ -4,7 +4,7 @@ export const scenarios: Record<Scenario, { title: string; prompt: string; descri
   requirement: {
     title: 'Найти требование',
     prompt: 'Когда присваивать номер распоряжению о рабочей группе и кто участвует по матрице?',
-    description: 'Демо ответ по выдержкам из кейса',
+    description: 'Поиск по оригинальным источникам',
   },
   document: {
     title: 'Создать документ',

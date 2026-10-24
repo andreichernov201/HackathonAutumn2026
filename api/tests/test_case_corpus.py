@@ -77,3 +77,19 @@ def test_real_matrix_row_6_required_and_conditional(case):
     assert 'Департамент информационных технологий визирует проект, если' in point.text
     assert point.table[0][1].strip() == 'Юридическое подразделение'
     assert service.search_knowledge(reader, SearchArgs(q='квазикристаллическая телепортация')).total == 0
+
+
+def test_numbered_list_stays_inside_real_point_42(case):
+    service, reader = case
+    guidance = next(document for document in service.list_knowledge_documents(reader, ListArgs()).items if document.category == 'guidance')
+    rows = service.sections(reader, guidance.latestVersion.id).items
+    point = next(row for row in rows if row.sectionNumber == '4.2')
+    full = service.get_knowledge_section(reader, point.id)
+    assert '1. ответственный исполнитель' in full.text
+    assert '3. корректор' in full.text
+    assert '4. Департамент ДОУ' in full.text
+    children = [row for row in rows if row.parentId == point.id]
+    # The original skips item 2. Preserve this, never repair normative content.
+    assert [row.sectionNumber for row in children] == ['1', '3', '4']
+    next_point = next(row for row in rows if row.sectionNumber == '4.3')
+    assert next_point.parentId == point.parentId

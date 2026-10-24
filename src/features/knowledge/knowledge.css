@@ -94,7 +94,7 @@
 .kb-toc h2 span { color: #a3b1c4; font-size: 9px; }
 .kb-toc ul { list-style: none; margin: 0; padding: 0; }
 .kb-toc ul ul { padding-left: 10px; border-left: 1px solid #e3ebf7; margin-left: 4px; }
-.kb-toc button { width: 100%; text-align: left; padding: 7px 6px; border: 0; border-radius: 5px; background: transparent; color: #7e90aa; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.kb-toc button { width: 100%; text-align: left; padding: 7px 6px; border: 0; border-radius: 5px; background: transparent; color: #7e90aa; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .kb-toc button:hover, .kb-toc button.selected { color: #2563eb; background: #eaf2ff; }
 .kb-toc summary { display: flex; cursor: pointer; }
 .kb-toc summary::before { content: '›'; color: #93a4bd; padding-top: 7px; font-size: 12px; }

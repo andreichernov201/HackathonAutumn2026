@@ -36,7 +36,7 @@ export function KnowledgeViewer({target, query, admin, onBack, onAsk, onVersionU
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true); setError(''); setSection(undefined); setItems([]); setSelectedId(''); setVersionId('')
+    setLoading(true); setError(''); setDocument(undefined); setVersions([]); setSection(undefined); setItems([]); setSelectedId(''); setVersionId('')
     async function load() {
       const initial = target.sectionId ? await knowledgeApi.section(target.sectionId) : undefined
       const doc = await knowledgeApi.get(initial?.source.documentId || target.documentId || '')
@@ -92,7 +92,7 @@ export function KnowledgeViewer({target, query, admin, onBack, onAsk, onVersionU
         <article className="kb-source-text" aria-busy={sectionLoading}>
           {sectionLoading ? <p className="kb-muted">Загрузка пункта…</p> : section ? <>
             <div className="kb-source-topline"><span><FileText size={15}/> {section.source.locator}</span>{section.pageStart && <a href={section.source.originalUrl} target="_blank" rel="noreferrer">Стр. {section.pageStart}{section.pageEnd !== section.pageStart ? `–${section.pageEnd}` : ''}</a>}</div>
-            <h2>{section.heading}</h2>
+            <h2>{section.heading.length > 160 && section.sectionNumber ? `Пункт ${section.sectionNumber}` : section.heading}</h2>
             {section.locatorConfidence === 'fragment' && <p className="kb-note">Точный номер положения не определён. Используется постоянная ссылка на извлечённый фрагмент.</p>}
             {section.table ? <div className="kb-table-scroll"><table><thead><tr>{section.table[0]?.map((cell, index) => <th key={index}><Highlight text={cell} query={query}/></th>)}</tr></thead><tbody>{section.table.slice(1).map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}><Highlight text={cell} query={query}/></td>)}</tr>)}</tbody></table><details><summary>Извлечённый текст для проверки цитаты</summary><pre><Highlight text={section.text} query={query}/></pre></details></div> : <pre><Highlight text={section.text} query={query}/></pre>}
             <div className="kb-section-nav"><button className="kb-button" disabled={position <= 0} onClick={() => setSelectedId(items[position-1].id)}><ArrowLeft size={15}/> Предыдущий</button><button className="kb-button" disabled={position < 0 || position >= items.length-1} onClick={() => setSelectedId(items[position+1].id)}>Следующий <ArrowRight size={15}/></button></div>

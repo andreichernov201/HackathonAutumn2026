@@ -24,7 +24,7 @@ export const assistantGateway: AssistantGateway = {
       status: 'not-configured', conversationId: request.conversationId,
       message: 'Пункт закреплён в контексте диалога. Qwen/RAG пока не подключён: доступен оригинальный текст и поиск в базе знаний, автоматическое объяснение недоступно.',
     }
-    if (request.file || request.scenario === 'file-check') return demoGateway.submit(request)
+    if (request.context.file || request.scenario === 'file-check') return demoGateway.submit(request)
     const found = await knowledgeApi.search(request.message, {category: '', status: '', fileType: '', sort: 'updatedAt'})
     const sources = found.items.slice(0, 3).map(hit => hit.citation)
     return {
