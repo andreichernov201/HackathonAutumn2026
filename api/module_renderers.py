@@ -10,6 +10,7 @@ from io import BytesIO
 from docx import Document
 
 from .working_group import MONTHS, drop_paragraph, drop_table, replace, replace_pattern
+from .preview_markup import field_value, finish_preview, mark_field
 
 MODULES = {
     'project-committee-order': ('О создании проектного комитета', 3, 13),
@@ -22,20 +23,21 @@ MODULES = {
 
 
 def value(fields, key, draft):
-    return fields.get(key, '').strip() or ('…' if draft else '')
+    return field_value(fields, key, draft)
 
 
 def date_value(fields, key, draft):
     raw = fields.get(key, '').strip()
     if not raw:
-        return '…' if draft else ''
+        return mark_field(fields, key, '…') if draft else ''
     try:
         parsed = date.fromisoformat(raw)
     except ValueError:
         if draft:
             return '…'
         raise
-    return f'«{parsed.day:02d}» {MONTHS[parsed.month-1]} {parsed.year} г.'
+    text = f'«{parsed.day:02d}» {MONTHS[parsed.month-1]} {parsed.year} г.'
+    return mark_field(fields, key, text) if draft else text
 
 
 def slot(paragraph, new, pattern=r'_{3,}'):
@@ -61,7 +63,7 @@ def fill_signature(document, fields, draft):
 
 def fill_committee(p, document, fields, draft):
     form = value(fields, 'projectForm', draft)
-    plural = form == 'проектам'
+    plural = fields.get('projectForm', '').strip() == 'проектам'
     for index in (5, 8):
         exact(p[index], '[проекту / проектам]', form)
         slot(p[index], value(fields, 'projects', draft))
@@ -74,7 +76,7 @@ def fill_committee(p, document, fields, draft):
     slot(p[6], value(fields, 'projects', draft))
     exact(p[6], 'реализуемого(ых)', 'реализуемых' if plural else 'реализуемого')
     slot(p[6], value(fields, 'implementingDepartment', draft))
-    if fields.get('cancelDate') or fields.get('cancelNumber') or fields.get('cancelTitle'):
+    if any(fields.get(key, '').strip() for key in ('cancelDate', 'cancelNumber', 'cancelTitle')):
         old_date = date_value(fields, 'cancelDate', draft)
         number = value(fields, 'cancelNumber', draft)
         title = value(fields, 'cancelTitle', draft)
@@ -153,6 +155,9 @@ def fill_appointees(table, fields, draft):
     while len(table.rows) > len(pairs) + 1:
         table._tbl.remove(table.rows[-1]._tr)
     for row, (department, person) in enumerate(pairs, 1):
+        if draft:
+            department = mark_field(fields, 'appointees', department, placeholder='Укажите подразделение')
+            person = mark_field(fields, 'appointees', person, placeholder='Укажите сотрудника')
         cell0, cell1 = table.rows[row].cells
         if re.search(r'_{3,}', cell0.text):
             slot(cell0.paragraphs[0], department)
@@ -185,7 +190,8 @@ def fill_handover(p, document, fields, draft):
     for key in ('giver', 'receiver', 'items'):
         slot(p[8], value(fields, key, draft))
     if fields.get('source', '').strip():
-        slot(p[8], re.sub(r'^от\s+', '', value(fields, 'source', draft), flags=re.IGNORECASE))
+        source = re.sub(r'^от\s+', '', fields['source'].strip(), flags=re.IGNORECASE)
+        slot(p[8], mark_field(fields, 'source', source) if draft else source)
     else:
         replace_pattern(p[8], r'\s*от _{3,}\s*\[5\]', '')
     exact(p[8], ' в порядке,', f" не позднее {date_value(fields, 'deadline', draft)} в порядке,")
@@ -255,6 +261,7 @@ def render(template_id: str, source: bytes, fields: dict[str, str], *, draft=Fal
                     replace(paragraph, ' (НЕ УДАЛЯТЬ)', '')
                     for hint in re.findall(r'\s*\[\d+\]', paragraph.text):
                         replace(paragraph, hint, '')
+    finish_preview(document, fields)
     text = '\n'.join(paragraph.text for paragraph in document.paragraphs)
     text += '\n' + '\n'.join(cell.text for table in document.tables for row in table.rows for cell in row.cells)
     if re.search(r'\[|\]|_{3,}|МОДУЛЬНЫЙ ДОКУМЕНТ|УТВЕРЖДАЮ|НЕ УДАЛЯТЬ|Примечания по заполнению', text):

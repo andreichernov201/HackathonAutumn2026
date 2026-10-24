@@ -10,6 +10,8 @@ from io import BytesIO
 
 from docx import Document
 
+from .preview_markup import field_value, finish_preview, mark_field
+
 MONTHS = ('января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря')
 
 def replace(paragraph, old: str, new: str):
@@ -39,7 +41,7 @@ def drop_paragraph(paragraph):
 def drop_table(table):
     table._element.getparent().remove(table._element)
 
-def render(source: bytes, fields: dict[str, str]) -> bytes:
+def render(source: bytes, fields: dict[str, str], *, draft=False) -> bytes:
     document = Document(BytesIO(source))
     paragraphs = document.paragraphs
     if len(paragraphs) < 29 or len(document.tables) != 4:
@@ -56,17 +58,27 @@ def render(source: bytes, fields: dict[str, str]) -> bytes:
         raise ValueError('source_structure_changed')
     if 'УТВЕРЖДАЮ' not in document.tables[0].cell(0, 1).text or 'ВИЗУАЛИЗАЦИЯ ЭП' not in document.tables[3].cell(1, 0).text:
         raise ValueError('source_structure_changed')
-    replace(paragraphs[1], 'НАИМЕНОВАНИЕ ОРГАНИЗАЦИИ', fields['organization'].strip())
+    def value(key):
+        return field_value(fields, key, draft) if draft else fields[key].strip()
+    replace(paragraphs[1], 'НАИМЕНОВАНИЕ ОРГАНИЗАЦИИ', value('organization'))
     # Main text: only variable slots and numbered hints change; fixed clauses stay.
     for index, key in ((5, 'subject'), (6, 'purpose'), (8, 'subject'), (12, 'termination'), (13, 'control')):
-        replace_pattern(paragraphs[index], r'_{3,}', fields[key].strip())
+        replace_pattern(paragraphs[index], r'_{3,}', value(key))
     for index in (6, 8, 12, 13):
         replace_pattern(paragraphs[index], r'\s*\[\d+\]', '')
-    deadline = date.fromisoformat(fields['deadline'])
-    date_phrase = f'«{deadline.day:02d}» {MONTHS[deadline.month-1]} {deadline.year} г.'
+    if draft and not fields.get('deadline', '').strip():
+        date_phrase = mark_field(fields, 'deadline', '…')
+    else:
+        deadline = date.fromisoformat(fields['deadline'])
+        date_phrase = f'«{deadline.day:02d}» {MONTHS[deadline.month-1]} {deadline.year} г.'
+        if draft:
+            date_phrase = mark_field(fields, 'deadline', date_phrase)
     replace_pattern(paragraphs[9], r'«_{3}»\s*_{3,}\s*20_{3}\s*г\.', date_phrase)
-    replace_pattern(paragraphs[9], r'_{3,}', fields['tasks'].strip().rstrip('.'))
-    replace_pattern(paragraphs[9], r'_{3,}', (fields['result'].strip().rstrip('.') + ' ' + fields['recipient'].strip().rstrip('.')).strip())
+    def phrase(key):
+        text = fields.get(key, '').strip().rstrip('.') if draft else fields[key].strip().rstrip('.')
+        return mark_field(fields, key, text or '…') if draft else text
+    replace_pattern(paragraphs[9], r'_{3,}', phrase('tasks'))
+    replace_pattern(paragraphs[9], r'_{3,}', (phrase('result') + ' ' + phrase('recipient')).strip())
     replace_pattern(paragraphs[9], r'\s*\[\d+\]', '')
     replace_pattern(paragraphs[9], r'\s*\[\d+\]', '')
     replace(paragraphs[3], ' (НЕ УДАЛЯТЬ)', '')
@@ -75,11 +87,11 @@ def render(source: bytes, fields: dict[str, str]) -> bytes:
         raise ValueError('source_structure_changed')
     for row, key in ((1, 'chair'), (2, 'secretary'), (3, 'members')):
         cell = composition.cell(row, 1)
-        replace_pattern(cell.paragraphs[0], r'_{3,}', fields[key].strip())
+        replace_pattern(cell.paragraphs[0], r'_{3,}', value(key))
         if row == 3:
             replace_pattern(cell.paragraphs[0], r'\s*\[3\]', '')
     signature = document.tables[3]
-    replace_pattern(signature.cell(0, 2).paragraphs[0], r'И\. О\. Фамилия\s*\[8\]', fields['signer'].strip())
+    replace_pattern(signature.cell(0, 2).paragraphs[0], r'И\. О\. Фамилия\s*\[8\]', value('signer'))
     replace_pattern(signature.cell(0, 1).paragraphs[0], r'_{3,}', '')
     for cell in signature.rows[1].cells:
         for paragraph in cell.paragraphs:
@@ -92,6 +104,7 @@ def render(source: bytes, fields: dict[str, str]) -> bytes:
     for paragraph in paragraphs[15:]:
         drop_paragraph(paragraph)
     drop_paragraph(paragraphs[0])
+    finish_preview(document, fields)
     text = '\n'.join(p.text for p in document.paragraphs)
     text += '\n' + '\n'.join(cell.text for table in document.tables for row in table.rows for cell in row.cells)
     if re.search(r'\[\d+\]|_{3,}|МОДУЛЬНЫЙ ДОКУМЕНТ|УТВЕРЖДАЮ|НЕ УДАЛЯТЬ|Примечания по заполнению', text):

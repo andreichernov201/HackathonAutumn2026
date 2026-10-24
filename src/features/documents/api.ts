@@ -9,6 +9,10 @@ export const documentsApi = {
   create: (templateId: string, title?: string) => request<DocumentProject>('/api/document-projects', {method: 'POST', body: JSON.stringify({templateId, title})}),
   patch: (id: string, expectedVersion: number, fields: Record<string,string>, title?: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}`, {method: 'PATCH', body: JSON.stringify({expectedVersion, fields, title})}),
   preview: (id: string, fields: Record<string,string>) => request<{preview: {section:string;label:string;value:string}[]; validation: Validation}>(`/api/document-projects/${encodeURIComponent(id)}/preview`, {method: 'POST', body: JSON.stringify({fields})}),
+  previewFile: async (id: string, fields: Record<string,string>, signal?: AbortSignal): Promise<Blob> => {
+    const response = await requestResponse(`/api/document-projects/${encodeURIComponent(id)}/preview-file`, {method: 'POST', body: JSON.stringify({fields}), signal})
+    return response.blob()
+  },
   validate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/validate`, {method: 'POST'}),
   generate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/generate`, {method: 'POST'}),
   artifactUrl: (id: string, artifactId: string) => `/api/document-projects/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}/download`,
