@@ -65,6 +65,9 @@ def test_real_source_docx_preserves_service_areas_and_versions():
     project = client.patch(f'/api/document-projects/{project_id}', json={'expectedVersion': 1, 'fields': values()}, headers=headers).json()
     generated = client.post(f'/api/document-projects/{project_id}/generate', headers=headers)
     assert generated.status_code == 200, generated.text
+    assert len(client.post(f'/api/document-projects/{project_id}/generate', headers=headers).json()['artifacts']) == 1
+    unchanged = client.patch(f'/api/document-projects/{project_id}', json={'expectedVersion': 2, 'fields': values()}, headers=headers).json()
+    assert unchanged['version'] == 2 and unchanged['status'] == 'generated'
     artifact = generated.json()['artifacts'][0]
     download = client.get(f'/api/document-projects/{project_id}/artifacts/{artifact["artifactId"]}/download')
     assert download.status_code == 200

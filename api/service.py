@@ -147,8 +147,10 @@ class DocumentsService:
             if not row: return None
             if row['version'] != expected: raise ValueError('version_conflict')
             merged = {**json.loads(row['fields']), **fields}
-            result = db.execute('UPDATE projects SET fields=?, title=?, status=?, version=version+1, updated=? WHERE id=? AND owner=? AND version=?', (json.dumps(merged, ensure_ascii=False), title.strip() if title is not None else row['title'], 'draft', now(), project_id, owner, expected))
-            if result.rowcount != 1: raise ValueError('version_conflict')
+            next_title = title.strip() if title is not None else row['title']
+            if merged != json.loads(row['fields']) or next_title != row['title']:
+                result = db.execute('UPDATE projects SET fields=?, title=?, status=?, version=version+1, updated=? WHERE id=? AND owner=? AND version=?', (json.dumps(merged, ensure_ascii=False), next_title, 'draft', now(), project_id, owner, expected))
+                if result.rowcount != 1: raise ValueError('version_conflict')
         return self.get(owner, project_id)
 
     def _check_docx(self, content: bytes):
@@ -185,6 +187,8 @@ class DocumentsService:
         project = self.get(owner, project_id)
         if not project: return None
         if not project.validation.ready: raise ValueError('validation_failed')
+        if project.status == 'generated' and any(item.projectVersion == project.version for item in project.artifacts):
+            return project
         with self.db() as db:
             template = db.execute('SELECT * FROM templates WHERE id=?', (project.templateId,)).fetchone()
         source = (self.root/'templates'/f"{template['sha']}.docx").read_bytes()
