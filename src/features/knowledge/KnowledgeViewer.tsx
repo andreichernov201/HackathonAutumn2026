@@ -1,10 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Copy, ExternalLink, FileText, RefreshCw, Sparkles, Upload } from 'lucide-react'
 import { errorText, knowledgeApi } from './api'
 import { statusLabels, type KnowledgeCitation, type KnowledgeDocument, type KnowledgeSection, type KnowledgeVersion, type SectionSummary } from './types'
 
 export type ViewerTarget = {documentId?: string; sectionId?: string; versionId?: string}
-const PdfOriginal = lazy(() => import('./PdfOriginal'))
+const DocumentViewer = lazy(() => import('../../components/document-viewer/DocumentViewer').then(module => ({default: module.DocumentViewer})))
 export function Highlight({text, query}: {text: string; query: string}) {
   const tokens = query.match(/[\p{L}\p{N}.]+/gu)?.filter(value => value.length > 1).slice(0, 30) || []
   if (!tokens.length) return <>{text}</>
@@ -34,7 +34,7 @@ export function KnowledgeViewer({target, query, admin, onBack, onAsk, onVersionU
   const [indexBusy, setIndexBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [retry, setRetry] = useState(0)
-  const [view, setView] = useState<'text' | 'pdf'>('text')
+  const [view, setView] = useState<'text' | 'original'>('text')
 
   useEffect(() => {
     let cancelled = false
@@ -71,6 +71,7 @@ export function KnowledgeViewer({target, query, admin, onBack, onAsk, onVersionU
   }, [selectedId, items])
 
   const version = versions.find(item => item.id === versionId)
+  const originalLocation = useMemo(() => section ? {page: section.pageStart || undefined, quote: section.text} : undefined, [section])
   const position = items.findIndex(item => item.id === selectedId)
   async function copyLink() {
     if (!section) return
@@ -89,12 +90,12 @@ export function KnowledgeViewer({target, query, admin, onBack, onAsk, onVersionU
     {error && <div className="kb-error" role="alert">{error} <button onClick={() => setRetry(value => value+1)}>Повторить</button></div>}
     {loading ? <p className="kb-loading" role="status">Загрузка документа…</p> : document && <>
       <div className="kb-document-heading"><span className="kb-eyebrow">{document.materialNature === 'synthetic' ? 'СИНТЕТИЧЕСКИЙ УЧЕБНЫЙ МАТЕРИАЛ' : 'КОРПОРАТИВНЫЙ ДОКУМЕНТ'}</span><h1>{document.title}</h1><div className="kb-version-controls"><label>Редакция <select aria-label="Редакция документа" value={versionId} onChange={event => {setSelectedId(''); setVersionId(event.target.value); setError('')}}>{versions.map(item => <option value={item.id} key={item.id}>{item.versionLabel || 'Без обозначения'} · {item.checksum.slice(0, 8)} · {statusLabels[item.status]}</option>)}</select></label><span className="kb-badge">{version?.fileType.toUpperCase()}{version?.pageCount ? ` · ${version.pageCount} стр.` : ''}</span></div></div>
-      {version?.fileType === 'pdf' && <div className="kb-view-modes" aria-label="Режим просмотра документа"><button className="kb-button" aria-pressed={view === 'text'} onClick={() => setView('text')}>Текст по пунктам</button><button className="kb-button" aria-pressed={view === 'pdf'} onClick={() => setView('pdf')}>PDF оригинал</button></div>}
-      {view === 'pdf' && version?.fileType === 'pdf' ? <Suspense fallback={<p className="kb-loading" role="status">Загрузка просмотрщика PDF…</p>}><PdfOriginal key={version.id} url={version.originalUrl} initialPage={section?.pageStart || 1}/></Suspense> : <div className="kb-reader-grid">
+      {version && version.fileType !== 'txt' && <div className="kb-view-modes" aria-label="Режим просмотра документа"><button className="kb-button" aria-pressed={view === 'text'} onClick={() => setView('text')}>Текст по пунктам</button><button className="kb-button" aria-pressed={view === 'original'} onClick={() => setView('original')}>{version.fileType.toUpperCase()} оригинал</button></div>}
+      {view === 'original' && version && version.fileType !== 'txt' ? <Suspense fallback={<p className="kb-loading" role="status">Загрузка просмотрщика…</p>}><DocumentViewer key={version.id} source={version.originalUrl} filename={version.filename} format={version.fileType} documentId={version.id} mode="knowledge" initialLocation={originalLocation}/></Suspense> : <div className="kb-reader-grid">
         <nav className="kb-toc" aria-label="Содержание документа"><h2>Содержание <span>{items.length}</span></h2><SectionTree items={items} parent={null} selected={selectedId} onSelect={id => {setSelectedId(id); setError('')}} query={query}/></nav>
         <article className="kb-source-text" aria-busy={sectionLoading}>
           {sectionLoading ? <p className="kb-muted">Загрузка пункта…</p> : section ? <>
-            <div className="kb-source-topline"><span><FileText size={15}/> {section.source.locator}</span>{section.pageStart && (version?.fileType === 'pdf' ? <button className="kb-button" onClick={() => setView('pdf')}>Стр. {section.pageStart}{section.pageEnd !== section.pageStart ? `–${section.pageEnd}` : ''}</button> : <a href={section.source.originalUrl} target="_blank" rel="noreferrer">Стр. {section.pageStart}{section.pageEnd !== section.pageStart ? `–${section.pageEnd}` : ''}</a>)}</div>
+            <div className="kb-source-topline"><span><FileText size={15}/> {section.source.locator}</span>{section.pageStart && (version?.fileType === 'pdf' ? <button className="kb-button" onClick={() => setView('original')}>Стр. {section.pageStart}{section.pageEnd !== section.pageStart ? `–${section.pageEnd}` : ''}</button> : <a href={section.source.originalUrl} target="_blank" rel="noreferrer">Стр. {section.pageStart}{section.pageEnd !== section.pageStart ? `–${section.pageEnd}` : ''}</a>)}</div>
             <h2>{section.heading.length > 160 && section.sectionNumber ? `Пункт ${section.sectionNumber}` : section.heading}</h2>
             {section.locatorConfidence === 'fragment' && <p className="kb-note">Точный номер положения не определён. Используется постоянная ссылка на извлечённый фрагмент.</p>}
             {section.table ? <div className="kb-table-scroll"><table><thead><tr>{section.table[0]?.map((cell, index) => <th key={index}><Highlight text={cell} query={query}/></th>)}</tr></thead><tbody>{section.table.slice(1).map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}><Highlight text={cell} query={query}/></td>)}</tr>)}</tbody></table><details><summary>Извлечённый текст для проверки цитаты</summary><pre><Highlight text={section.text} query={query}/></pre></details></div> : <pre><Highlight text={section.text} query={query}/></pre>}

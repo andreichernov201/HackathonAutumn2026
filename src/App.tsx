@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { type Section } from './app/navigation'
 import { Composer } from './components/Composer'
 import { ConversationView } from './components/ConversationView'
-import { SectionView } from './components/SectionView'
+import { ReviewPage } from './components/ReviewPage'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { WelcomeView } from './components/WelcomeView'
@@ -182,7 +182,7 @@ export default function App() {
         ? activeSession
           ? <ConversationView session={activeSession} onSource={selectSource} onStartDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setDocumentOpenVersion(value => value + 1); setSection('documents')}} />
           : <WelcomeView onChooseScenario={chooseScenario} />
-        : section === 'documents' || section === 'knowledge' ? null : <SectionView section={section} onChooseScenario={chooseScenario} />}
+        : section === 'check' ? <ReviewPage/> : null}
       <div className="documents-host" hidden={section !== 'documents'}><DocumentsPage initialProjectId={selectedDocumentId} openVersion={documentOpenVersion} onOpenChat={openDocumentInChat} /></div>
       <div className="knowledge-host" hidden={section !== 'knowledge'}><KnowledgePage onAsk={askKnowledge}/></div>
       {requestError && <p className="request-error" role="alert">{requestError}</p>}

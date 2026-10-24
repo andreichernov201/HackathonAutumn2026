@@ -1,0 +1,111 @@
+import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+const pdf = resolve('api/knowledge/sources/records-instruction.pdf')
+const docx = resolve('api/templates/sources/working-group-order.docx')
+
+test('Blob replacement preserves zoom and position; binary sources, annotations and three panels work', async ({page}, testInfo) => {
+  test.setTimeout(90000)
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  await page.goto('/tests/viewer/index.html')
+  await page.getByLabel('Fixture').setInputFiles(docx)
+  const word = page.getByRole('region', {name: 'Просмотр DOCX'})
+  await expect(word.getByRole('button', {name: 'Следующая страница DOCX'})).toBeEnabled({timeout: 30000})
+  await word.getByRole('button', {name: 'Сбросить масштаб'}).click()
+  await expect(page.getByTestId('ready-version')).toHaveText('1')
+  async function replaceSource(name: string) {
+    const revision = Number(await page.getByTestId('ready-version').innerText())
+    await page.getByRole('button', {name, exact: true}).click()
+    await expect(page.getByTestId('ready-version')).toHaveText(String(revision + 1))
+  }
+  const frame = page.frameLocator('iframe[title="Страницы DOCX"]')
+  const tables = await frame.locator('table').count()
+  expect(tables).toBe(4)
+  await word.locator('.dv-scroll').evaluate(node => node.scrollTop = 500)
+  await replaceSource('Replace Blob')
+  await expect(word.getByLabel('Масштаб DOCX')).toHaveText('100%')
+  await expect(word.getByRole('button', {name: 'Следующая страница DOCX'})).toBeEnabled()
+  await expect.poll(() => word.locator('.dv-scroll').evaluate(node => node.scrollTop)).toBeGreaterThan(400)
+  expect(await frame.locator('table').count()).toBe(tables)
+  for (const name of ['ArrayBuffer', 'Uint8Array']) {
+    await replaceSource(name)
+    await expect(word.getByRole('button', {name: 'Следующая страница DOCX'})).toBeEnabled()
+    await expect(frame.locator('table')).toHaveCount(tables)
+  }
+  await page.getByLabel('Quote', {exact: true}).fill('невозможный тестовый фрагмент')
+  await page.getByRole('button', {name: 'Annotate', exact: true}).click()
+  await expect(page.getByTestId('navigation-result')).toContainText('"exact":false')
+  await expect(word.locator('.dv-location-note')).toContainText('невозможный тестовый фрагмент')
+  await page.getByRole('button', {name: 'Clear', exact: true}).click()
+  await expect(word.locator('.dv-location-note')).toHaveCount(0)
+  const separator = page.getByRole('separator').first()
+  await separator.focus(); const before = await word.boundingBox(); await page.keyboard.press('ArrowRight')
+  await expect.poll(async () => (await word.boundingBox())?.width).not.toBe(before?.width)
+  await page.getByRole('button', {name: 'Скрыть: Форма'}).click()
+  await expect(page.getByRole('button', {name: 'Показать: Форма'})).toBeVisible()
+  await page.getByLabel('Fixture').setInputFiles(pdf)
+  const reader = page.getByRole('region', {name: 'Просмотр PDF'})
+  await expect(reader.getByRole('button', {name: 'Следующая страница PDF'})).toBeEnabled({timeout: 30000})
+  await page.getByRole('button', {name: 'Location page', exact: true}).click()
+  await expect(page.getByTestId('navigation-result')).toContainText('"exact":true')
+  await expect(reader.getByLabel('Номер страницы PDF')).toHaveValue('3')
+  await page.getByRole('button', {name: 'Page 40', exact: true}).click()
+  await expect(reader.getByLabel('Номер страницы PDF')).toHaveValue('40')
+  await expect(reader.locator('[data-page="40"] canvas')).toBeVisible()
+  expect(await reader.locator('canvas').count()).toBeLessThan(12)
+  for (const name of ['ArrayBuffer', 'Uint8Array', 'Replace Blob']) {
+    await replaceSource(name)
+    await expect(reader.locator('[data-page="40"] canvas')).toBeVisible({timeout: 30000})
+    await expect(reader.getByLabel('Номер страницы PDF')).toHaveValue('40')
+  }
+  await page.screenshot({path: testInfo.outputPath('windowed-page-40.png')})
+  expect(errors).toEqual([])
+})
+
+test('same-origin URL errors, aborted loads and recovery never reveal an outdated document', async ({page}) => {
+  const bytes = await readFile(pdf)
+  let release!: () => void, reached!: () => void
+  const gate = new Promise<void>(resolve => {release = resolve}), pending = new Promise<void>(resolve => {reached = resolve})
+  await page.route('**/api/session', route => route.fulfill({json: {deviceId: 'fixture', csrfToken: 'fixture'}}))
+  await page.route('**/api/viewer-fixture', route => route.fulfill({body: bytes, contentType: 'application/pdf'}))
+  await page.route('**/api/viewer-slow', async route => {reached(); await gate; await route.fulfill({body: bytes, contentType: 'application/pdf'}).catch(() => {})})
+  let failures = 0
+  await page.route('**/api/viewer-failure', route => {
+    failures++
+    return failures === 1 ? route.fulfill({status: 403, json: {detail: 'Доступ к оригиналу запрещён'}})
+      : failures === 2 ? route.fulfill({status: 503, json: {detail: 'Сервер временно недоступен'}})
+      : route.fulfill({body: bytes, contentType: 'application/pdf'})
+  })
+  await page.goto('/tests/viewer/index.html')
+  await page.getByRole('button', {name: 'Slow URL', exact: true}).click(); await pending
+  await page.getByLabel('Fixture').setInputFiles(docx); release()
+  await expect(page.getByRole('region', {name: 'Просмотр DOCX'}).getByRole('button', {name: 'Следующая страница DOCX'})).toBeEnabled({timeout: 30000})
+  await expect(page.locator('canvas')).toHaveCount(0)
+  await page.getByRole('button', {name: 'Failed URL', exact: true}).click()
+  await expect(page.getByRole('alert')).toContainText('Доступ к оригиналу запрещён')
+  await page.getByRole('button', {name: 'Повторить открытие', exact: true}).click()
+  await expect(page.getByRole('alert')).toContainText('Сервер временно недоступен')
+  await page.getByRole('button', {name: 'Повторить открытие', exact: true}).click()
+  await expect(page.getByRole('region', {name: 'Просмотр PDF'}).getByRole('button', {name: 'Следующая страница PDF'})).toBeEnabled({timeout: 30000})
+  await page.getByRole('button', {name: 'External URL', exact: true}).click()
+  await expect(page.getByRole('alert')).toContainText('на этом сервере')
+  await page.getByRole('button', {name: 'URL', exact: true}).click()
+  await expect(page.getByRole('region', {name: 'Просмотр PDF'}).getByRole('button', {name: 'Следующая страница PDF'})).toBeEnabled({timeout: 30000})
+})
+
+test('DOCX active content cannot execute, navigate or send external requests', async ({page}) => {
+  const external: string[] = []
+  page.on('request', request => {if (request.url().startsWith('https://example.invalid')) external.push(request.url())})
+  await page.goto('/tests/viewer/index.html')
+  await page.getByLabel('Fixture').setInputFiles(resolve('tests/viewer/fixtures/unsafe-content.docx'))
+  const reader = page.getByRole('region', {name: 'Просмотр DOCX'})
+  await expect(reader.getByRole('button', {name: 'Следующая страница DOCX'})).toBeEnabled({timeout: 30000})
+  const frame = page.frameLocator('iframe[title="Страницы DOCX"]')
+  await expect(frame.getByText('Unsafe hyperlink fixture')).toBeVisible()
+  expect(await frame.locator('a').first().getAttribute('href')).toBeNull()
+  await frame.getByText('Unsafe hyperlink fixture').click()
+  expect(await page.locator('html').getAttribute('data-executed')).toBeNull()
+  expect(await frame.locator('script,iframe,object,embed').count()).toBe(0)
+  expect(external).toEqual([])
+  await expect(page.locator('iframe')).toHaveAttribute('sandbox', 'allow-same-origin')
+})

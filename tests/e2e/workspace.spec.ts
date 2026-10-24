@@ -106,4 +106,8 @@ test('generation keeps later edits and downloads a real saved DOCX', async ({ pa
   const download = await downloadEvent
   expect(download.suggestedFilename()).toMatch(/\.docx$/)
   expect(await download.failure()).toBeNull()
+  await page.getByRole('button', {name: 'Просмотреть DOCX', exact: true}).click()
+  const viewer = page.getByRole('region', {name: 'Просмотр DOCX'})
+  await expect(viewer.getByLabel('Масштаб DOCX')).toBeVisible()
+  await expect(page.frameLocator('iframe[title="Страницы DOCX"]').locator('body')).toContainText('Интеграция organization', {timeout: 30000})
 })

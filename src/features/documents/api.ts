@@ -11,6 +11,7 @@ export const documentsApi = {
   preview: (id: string, fields: Record<string,string>) => request<{preview: {section:string;label:string;value:string}[]; validation: Validation}>(`/api/document-projects/${encodeURIComponent(id)}/preview`, {method: 'POST', body: JSON.stringify({fields})}),
   validate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/validate`, {method: 'POST'}),
   generate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/generate`, {method: 'POST'}),
+  artifactUrl: (id: string, artifactId: string) => `/api/document-projects/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}/download`,
   download: async (id: string, artifactId: string, filename: string) => {
     const response = await requestResponse(`/api/document-projects/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}/download`)
     const blob = await response.blob()

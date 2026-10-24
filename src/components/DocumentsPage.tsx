@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Download, FilePlus2, Search, ShieldAlert } from 'lucide-react'
 import { documentsApi } from '../features/documents/api'
 import type { DocumentProject, DocumentTemplate } from '../features/documents/types'
+
+const DocumentViewer = lazy(() => import('./document-viewer/DocumentViewer').then(module => ({default: module.DocumentViewer})))
 
 const statusLabel = {awaiting_source: 'Ожидает исходный DOCX', awaiting_review: 'Ожидает проверки', awaiting_schema: 'Схема готовится', ready: 'Источник подключён'}
 const errorLabel: Record<string,string> = { version_conflict: 'Проект изменился в другом окне. Сравните правки перед повторным сохранением.', validation_failed: 'Заполните обязательные поля и проверьте источник.', source_not_ready: 'Исходный DOCX ещё не готов.', csrf_required: 'Сеанс изменился. Обновите страницу.' }
@@ -16,6 +18,7 @@ export function DocumentsPage({initialProjectId, openVersion, onOpenChat}: Props
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [saveState, setSaveState] = useState('')
   const template = templates.find(item => item.templateId === project?.templateId)
 
@@ -77,6 +80,7 @@ export function DocumentsPage({initialProjectId, openVersion, onOpenChat}: Props
       <div className="docs-editor-grid"><div className="docs-form"><label>Название проекта<input value={project.title} onChange={e => {editRevision.current += 1; setProject({...project, title: e.target.value}); setSaveState('Есть несохранённые изменения')}} /></label>{template && [...new Set(template.fields.map(f => f.section))].map(section => <fieldset key={section}><legend>{section}</legend>{template.fields.filter(f => f.section === section).map(spec => <label key={spec.key}>{spec.label}{spec.required && <span className="docs-required"> *</span>}{spec.multiline ? <textarea value={project.fields[spec.key] || ''} onChange={e => editField(spec.key, e.target.value)} /> : spec.inputType === 'select' ? <select value={project.fields[spec.key] || ''} onChange={e => editField(spec.key, e.target.value)}><option value=''>Выберите вариант</option>{spec.options.map(option => <option key={option} value={option}>{option}</option>)}</select> : <input type={spec.inputType} value={project.fields[spec.key] || ''} onChange={e => editField(spec.key, e.target.value)} />}</label>)}</fieldset>)}</div>
       <aside className="docs-preview"><div className="docs-paper"><span>ПРЕДПРОСМОТР · ПРОЕКТ</span><h3>{template?.title || 'Документ'}</h3><p className="docs-blank">Зона даты и регистрационного номера — без заполнения</p>{project.preview.map((item, index) => <div key={index}><small>{item.label}</small><p>{item.value || 'Не заполнено'}</p></div>)}<p className="docs-blank">Зона визуализации ЭП сохраняется. Подписи и визы отсутствуют.</p></div><p className="docs-note">Это экранный предпросмотр, сформированный сервером, а не изображение утверждённого документа.</p></aside></div>
       <div className="docs-actions"><button className="docs-secondary" onClick={() => void saveAll()} disabled={busy}>Сохранить</button><button className="docs-secondary" onClick={() => void action('validate')} disabled={busy || !['Сохранено', '', 'Загружена версия сервера'].includes(saveState)}>Проверить</button><button className="docs-primary" onClick={() => void action('generate')} disabled={busy || !['Сохранено', '', 'Загружена версия сервера'].includes(saveState) || !project.validation.ready}>Сформировать DOCX</button>{project.artifacts[0] && <button className="docs-secondary" onClick={() => documentsApi.download(project.projectId, project.artifacts[0].artifactId, project.artifacts[0].filename).catch(showError)}><Download size={16}/> Скачать версию {project.artifacts[0].projectVersion}</button>}</div>
+      {project.artifacts[0] && <div className="docs-artifact-preview"><button className="docs-secondary" type="button" aria-expanded={previewOpen} onClick={() => setPreviewOpen(value => !value)}>{previewOpen ? 'Закрыть просмотр DOCX' : 'Просмотреть DOCX'}</button>{previewOpen && <><p className="docs-note">Сохранённый DOCX · версия {project.artifacts[0].projectVersion}. Последующие правки полей появятся после сохранения и формирования новой версии.</p><Suspense fallback={<p>Загрузка просмотрщика…</p>}><DocumentViewer source={documentsApi.artifactUrl(project.projectId, project.artifacts[0].artifactId)} filename={project.artifacts[0].filename} documentId={project.projectId} mode="editor"/></Suspense></>}</div>}
       <div className="docs-issues"><h3>Проверка</h3>{project.validation.issues.length ? <ul>{project.validation.issues.map((item, i) => <li key={i}><ShieldAlert size={15}/>{item.message}</li>)}</ul> : <p>Поля и исходный шаблон готовы к генерации. Это не подтверждение согласования.</p>}</div>
       {project.artifacts.length > 0 && <div className="docs-versions"><h3>Сохранённые версии</h3>{project.artifacts.map(item => <button key={item.artifactId} onClick={() => documentsApi.download(project.projectId, item.artifactId, item.filename).catch(showError)}>{item.filename} · {new Date(item.createdAt).toLocaleString('ru-RU')}</button>)}</div>}
     </>}

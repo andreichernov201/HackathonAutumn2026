@@ -79,6 +79,7 @@ jobs:
       - run: npm run test:e2e
         env:
           REGULA_TEST_URL: http://127.0.0.1:8080
+      - run: npm run test:viewer
       - run: python scripts/compose-smoke.py
       - name: Container diagnostics
         if: failure()
