@@ -6,6 +6,7 @@ RUN npm ci
 
 COPY index.html tsconfig.json vite.config.ts ./
 COPY src ./src
+COPY scripts/pdf-assets.ts ./scripts/pdf-assets.ts
 RUN npm run build
 
 FROM nginx/nginx-unprivileged:stable-alpine AS runtime

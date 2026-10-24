@@ -13,6 +13,7 @@ from .models import Artifact, DocumentProject, FieldSpec, Template, Validation, 
 from .module_renderers import preview as preview_module, render as render_module
 from .template_schemas import SCHEMAS
 from .working_group import render as render_working_group
+from .preview_service import render_document_preview
 
 TEMPLATE_ID = 'working-group-order'
 SOURCE_DIR = Path(__file__).parent / 'templates' / 'sources'
@@ -198,6 +199,33 @@ class DocumentsService:
                 result = db.execute('UPDATE projects SET fields=?, title=?, status=?, version=version+1, updated=? WHERE id=? AND owner=? AND version=?', (json.dumps(merged, ensure_ascii=False), next_title, 'draft', now(), project_id, owner, expected))
                 if result.rowcount != 1: raise ValueError('version_conflict')
         return self.get(owner, project_id)
+
+    def preview_file(self, owner: str, project_id: str, fields: dict[str, str]):
+        # Read only the authorized row: get() also renders the old text preview,
+        # which is unnecessary here and may fail if a source has gone missing.
+        with self.db() as db:
+            row = db.execute('SELECT * FROM projects WHERE id=? AND owner=?', (project_id, owner)).fetchone()
+            if not row:
+                return None
+            source_row = db.execute('SELECT * FROM templates WHERE id=?', (row['template_id'],)).fetchone()
+        if not source_row:
+            raise ValueError('template_not_found')
+        template = self.template(row['template_id'])
+        allowed = {spec.key for spec in template.fields}
+        if (any(key not in allowed or not isinstance(value, str) or len(value) > 4000
+                or re.search(r'[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]', value)
+                for key, value in fields.items())
+                or sum(len(value) for value in fields.values()) > 128_000):
+            raise ValueError('invalid_fields')
+        validation = self._validation(fields, template, row['template_version'])
+        blocking = [issue for issue in validation.issues if issue.code not in ('required', 'conditional_required')]
+        if blocking:
+            raise ValueError(blocking[0].code)
+        try:
+            source = (self.root / 'templates' / f"{source_row['sha']}.docx").read_bytes()
+        except OSError as exc:
+            raise ValueError('source_missing') from exc
+        return render_document_preview(row['template_id'], source, fields, template.fields)
 
     def _check_docx(self, content: bytes):
         if len(content)>10_000_000 or not content.startswith(b'PK'): raise ValueError('invalid_docx')

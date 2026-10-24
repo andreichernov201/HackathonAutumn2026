@@ -17,6 +17,7 @@ from .session import SESSION_MAX_AGE, write_session_cookie
 
 from .models import ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
 from .service import DocumentsService, TEMPLATE_ID
+from .preview_service import DOCX_MIME
 from .knowledge.service import KnowledgeService, KnowledgeError
 from .knowledge.router import build_router, principal_for
 from .knowledge import tools as knowledge_tools
@@ -178,6 +179,25 @@ def preview_project(project_id: str, body: PreviewFields, user=Depends(mutation)
 @app.post('/api/document-projects/{project_id}/validate', response_model=DocumentProject)
 def validate_project(project_id: str, user=Depends(mutation)):
     return project_or_404(user, project_id)
+
+
+@app.post('/api/document-projects/{project_id}/preview-file', response_class=Response, responses={200: {'content': {DOCX_MIME: {}}}})
+def preview_project_file(project_id: str, body: PreviewFields, user=Depends(mutation)):
+    try:
+        UUID(project_id)
+    except ValueError:
+        raise HTTPException(404, 'project_not_found')
+    try:
+        content = service.preview_file(user['deviceId'], project_id, body.fields)
+    except ValueError as exc:
+        error(exc)
+    if content is None:
+        raise HTTPException(404, 'project_not_found')
+    return Response(content=content, media_type=DOCX_MIME, headers={
+        'Content-Disposition': 'inline; filename="preview.docx"',
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+    })
 
 @app.post('/api/document-projects/{project_id}/generate', response_model=DocumentProject)
 def generate_project(project_id: str, user=Depends(mutation)):
