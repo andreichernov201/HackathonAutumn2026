@@ -7,10 +7,12 @@ import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { WelcomeView } from './components/WelcomeView'
 import { WorkspacePanel } from './components/WorkspacePanel'
+import { DocumentsPage } from './components/DocumentsPage'
+import type { DocumentProject } from './features/documents/types'
 import { assistantGateway } from './features/assistant/gateway'
 import { scenarios } from './features/assistant/scenarios'
 import { sessionStore } from './features/assistant/sessionStore'
-import type { ChatMessage, ChatSession, FileReference, ProjectDraft, Scenario, WorkspaceTab } from './features/assistant/types'
+import type { ChatMessage, ChatSession, FileReference, Scenario, WorkspaceTab } from './features/assistant/types'
 
 const closedWorkspace = { open: false, tab: 'sources' as WorkspaceTab }
 
@@ -24,6 +26,7 @@ export default function App() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const activeSession = sessions.find((item) => item.id === activeSessionId)
   const workspace = activeSession?.workspace ?? closedWorkspace
@@ -68,14 +71,6 @@ export default function App() {
     updateSession(activeSessionId, (session) => ({ ...session, workspace: { open: true, tab: 'sources', selectedSourceId: sourceId } }))
   }
 
-  function updateProject(patch: Partial<Pick<ProjectDraft, 'title' | 'chair' | 'projectType'>>) {
-    if (!activeSessionId) return
-    updateSession(activeSessionId, (session) => session.project ? {
-      ...session,
-      project: { ...session.project, ...patch, status: 'collecting-data' },
-    } : session)
-  }
-
   async function submit() {
     const text = draft.trim()
     if ((!text && !file) || submitting) return
@@ -101,10 +96,17 @@ export default function App() {
     setSubmitting(true)
 
     try {
+      if (scenario === 'document' || /созда(ть|й|м|ю).*?(документ|распоряжен)/i.test(text)) {
+        setSection('documents')
+        setSelectedDocumentId(undefined)
+        const reply: ChatMessage = {id: crypto.randomUUID(), role: 'assistant', text: 'Открыл раздел «Документы». Выберите модуль и создайте серверный проект. Затем его можно открыть обратно в чате.', createdAt: new Date().toISOString(), origin: 'api'}
+        updateSession(id, session => ({...session, messages: [...session.messages, reply]}))
+        return
+      }
       const result = await assistantGateway.submit({
         conversationId: id, message: text, scenario,
         history: existing?.messages ?? [],
-        context: { project: existing?.project, workspace: existing?.workspace ?? closedWorkspace, file: fileReference },
+        context: { documentProjectId: existing?.documentProjectId, workspace: existing?.workspace ?? closedWorkspace, file: fileReference },
       })
       if (result.status !== 'completed') {
         setRequestError(result.message)
@@ -114,7 +116,6 @@ export default function App() {
       updateSession(id, (session) => ({
         ...session, updatedAt: reply.createdAt, messages: [...session.messages, reply],
         sources: [...(session.sources ?? []).filter((source) => !result.sources.some((item) => item.id === source.id)), ...result.sources],
-        project: result.project ?? session.project,
         workspace: result.workspace ?? session.workspace,
       }))
     } catch {
@@ -122,6 +123,18 @@ export default function App() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function openDocumentInChat(project: DocumentProject) {
+    const id = activeSessionId ?? crypto.randomUUID()
+    const time = new Date().toISOString()
+    const message: ChatMessage = {id: crypto.randomUUID(), role: 'assistant', text: `Открыт серверный проект «${project.title}» (версия ${project.version}). Редактирование, проверка и DOCX доступны в разделе «Документы».`, createdAt: time, origin: 'api'}
+    setSessions(previous => {
+      const current = previous.find(item => item.id === id)
+      const next: ChatSession = current ? {...current, documentProjectId: project.projectId, messages: [...current.messages, message], updatedAt: time, workspace: {open: true, tab: 'document'}} : {id, title: project.title, documentProjectId: project.projectId, messages: [message], updatedAt: time, workspace: {open: true, tab: 'document'}}
+      return [next, ...previous.filter(item => item.id !== id)]
+    })
+    setActiveSessionId(id); setSelectedDocumentId(project.projectId); setSection('assistant')
   }
 
   return <div className="app-shell selection:bg-blue-100">
@@ -141,15 +154,17 @@ export default function App() {
         workspaceOpen={section === 'assistant' && workspace.open} canOpenWorkspace={Boolean(activeSession)} onWorkspace={() => activeSessionId && updateSession(activeSessionId, (session) => ({ ...session, workspace: { ...session.workspace ?? closedWorkspace, open: true } }))} />
       {section === 'assistant'
         ? activeSession
-          ? <ConversationView session={activeSession} onSource={selectSource} onTab={setWorkspaceTab} onStartDocument={() => chooseScenario('document')} />
+          ? <ConversationView session={activeSession} onSource={selectSource} onStartDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setSection('documents')}} />
           : <WelcomeView onChooseScenario={chooseScenario} />
-        : <SectionView section={section} onChooseScenario={chooseScenario} />}
+        : section === 'documents' ? <DocumentsPage initialProjectId={selectedDocumentId} onOpenChat={openDocumentInChat} /> : <SectionView section={section} onChooseScenario={chooseScenario} />}
       {requestError && <p className="request-error" role="alert">{requestError}</p>}
-      <Composer inputRef={inputRef} draft={draft} file={file} scenario={scenario} submitting={submitting}
+      {section === 'assistant' && <Composer inputRef={inputRef} draft={draft} file={file} scenario={scenario} submitting={submitting}
         onDraft={setDraft} onFile={setFile} onScenario={setScenario} onSubmit={() => void submit()} />
+      }
     </main>
-    {section === 'assistant' && activeSession && <WorkspacePanel state={workspace} sources={activeSession.sources ?? []} project={activeSession.project}
+    {section === 'assistant' && activeSession && <WorkspacePanel state={workspace} sources={activeSession.sources ?? []} documentProjectId={activeSession.documentProjectId} onOpenDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setSection('documents')}}
       onClose={() => updateSession(activeSession.id, (session) => ({ ...session, workspace: { ...session.workspace ?? closedWorkspace, open: false } }))}
-      onTab={setWorkspaceTab} onProject={updateProject} />}
+      onTab={setWorkspaceTab} />}
   </div>
 }
+

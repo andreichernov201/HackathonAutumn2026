@@ -9,7 +9,7 @@ export const scenarios: Record<Scenario, { title: string; prompt: string; descri
   document: {
     title: 'Создать документ',
     prompt: 'Создать проект распоряжения о рабочей группе',
-    description: 'Черновик распоряжения без DOCX',
+    description: 'Редактор распоряжения и DOCX',
   },
   'file-check': {
     title: 'Проверить файл',
@@ -22,4 +22,5 @@ export const scenarios: Record<Scenario, { title: string; prompt: string; descri
     description: 'Подразделения по матрице, без маршрута',
   },
 }
+
 

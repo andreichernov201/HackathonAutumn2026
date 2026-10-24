@@ -198,6 +198,55 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
   *, *::before, *::after { transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
+/* Documents keeps the existing blue, white and slate visual language. */
+.docs-page {flex:1; min-height:0; overflow:auto; padding:30px clamp(18px, 3vw, 42px) 48px;}
+.docs-heading, .docs-section-head, .docs-editor-head {display:flex; align-items:center; justify-content:space-between; gap:16px;}
+.docs-heading {margin-bottom:27px;}
+.docs-heading h1 {margin:5px 0 6px; font-size:32px; letter-spacing:-.04em;}
+.docs-heading p, .docs-note {margin:0; color:#74829a; font-size:12px; line-height:1.55;}
+.docs-section-head {margin:22px 0 13px;}
+.docs-section-head h2 {margin:0; font-size:18px;}
+.docs-section-head span {font-size:12px; color:#8a97aa;}
+.docs-search {display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #dfe8f4; border-radius:9px; padding:8px 10px; color:#8a97aa;}
+.docs-search input {border:0; outline:0; min-width:150px; font-size:12px;}
+.docs-catalog {display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin-bottom:10px;}
+.docs-card, .docs-project-row, .docs-admin, .docs-login, .docs-editor-head, .docs-progress, .docs-form, .docs-preview, .docs-issues, .docs-versions {background:#fff; border:1px solid #e5ebf4; border-radius:13px; box-shadow:0 3px 14px #283f6308;}
+.docs-card {padding:19px;}
+.docs-card h3 {font-size:16px; margin:8px 0;}
+.docs-card p {font-size:12px; line-height:1.55; color:#718097;}
+.docs-kicker {color:#3174e9; font-size:10px; font-weight:750; letter-spacing:.08em;}
+.docs-card-meta {display:flex; flex-wrap:wrap; gap:7px; margin:15px 0;}
+.docs-card-meta span {background:#f2f6fc; border-radius:20px; padding:5px 8px; font-size:10px; color:#667b9a;}
+.docs-primary, .docs-secondary {display:inline-flex; align-items:center; justify-content:center; gap:7px; border-radius:8px; padding:9px 12px; font-size:12px; font-weight:650;}
+.docs-primary {border:1px solid #2563eb; background:#2563eb; color:#fff;}
+.docs-primary:hover:not(:disabled) {background:#1754d4;}
+.docs-secondary {border:1px solid #d7e4f5; background:#fff; color:#295ea9;}
+.docs-secondary:hover:not(:disabled) {background:#eff6ff;}
+.docs-primary:disabled, .docs-secondary:disabled {opacity:.5; cursor:not-allowed;}
+.docs-project-list {display:grid; gap:9px;}
+.docs-project-row {padding:13px 16px; display:flex; justify-content:space-between; align-items:center; gap:15px;}
+.docs-project-row strong, .docs-project-row small {display:block;}
+.docs-project-row strong {font-size:13px;}.docs-project-row small {color:#8a97aa; font-size:10px; margin-top:4px;}
+.docs-project-row > div:last-child {display:flex; gap:7px;}
+.docs-editor-head {padding:18px 20px; margin-bottom:13px;}
+.docs-editor-head h2 {margin:6px 0; font-size:20px;}.docs-editor-head small {color:#8492a7; font-size:10px;}
+.docs-progress {display:flex; align-items:center; gap:14px; padding:12px 18px; margin-bottom:13px; font-size:11px; color:#667b9a;}
+.docs-progress strong {color:#2563eb;}.docs-progress progress {width:min(260px,35%); accent-color:#2563eb;}
+.docs-editor-grid {display:grid; grid-template-columns:minmax(320px,1fr) minmax(320px,1fr); gap:13px; align-items:start;}
+.docs-form, .docs-preview {padding:19px;}.docs-form fieldset {border:0; padding:0; margin:18px 0 0; border-top:1px solid #e9eef6;}
+.docs-form legend {padding:14px 0 3px; font-size:13px; font-weight:700; color:#263650;}
+.docs-form label, .docs-login label {display:grid; gap:6px; margin:11px 0; font-size:11px; font-weight:650; color:#53647d;}
+.docs-form input, .docs-form textarea, .docs-login input, .docs-login select, .docs-admin input, .docs-admin textarea {width:100%; border:1px solid #dfe8f4; border-radius:8px; padding:9px 10px; color:#263650; background:#fff; font-size:12px;}
+.docs-form textarea {min-height:80px; resize:vertical;}.docs-required {color:#d14343;}
+.docs-paper {border:1px solid #e5e9ef; background:#fff; min-height:520px; padding:27px; box-shadow:0 5px 18px #29384d0c; font-family:Georgia,serif;}
+.docs-paper > span {font:700 10px Inter,sans-serif; letter-spacing:.1em; color:#8a97aa;}.docs-paper h3 {margin:22px 0; text-align:center; font-size:18px;}
+.docs-paper div {margin:13px 0; border-bottom:1px solid #eef1f4;}.docs-paper small {color:#8a97aa; font:600 10px Inter,sans-serif;}.docs-paper p {font-size:13px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere;}.docs-paper div p:empty {color:#aaa;}
+.docs-blank {color:#9aa6b8; font-size:11px !important;}.docs-preview .docs-note {margin-top:12px;}
+.docs-actions {display:flex; flex-wrap:wrap; gap:8px; margin:15px 0;}.docs-issues, .docs-versions {padding:16px 19px; margin:12px 0;}.docs-issues h3, .docs-versions h3 {margin:0 0 9px; font-size:13px;}.docs-issues ul {padding:0; margin:0; list-style:none; display:grid; gap:7px;}.docs-issues li {display:flex; align-items:flex-start; gap:7px; font-size:11px; color:#71543f;}.docs-issues li svg {flex:none; color:#d39033;}.docs-issues p {font-size:11px; color:#4c876d;}
+.docs-versions button {display:block; border:0; padding:6px 0; background:transparent; color:#2563eb; font-size:11px;}.docs-error {background:#fff1f0; border:1px solid #ffd7d3; color:#b42318; border-radius:8px; padding:10px; font-size:12px;}.docs-admin {margin-top:20px; padding:18px; display:grid; gap:9px; max-width:640px;}.docs-admin h2 {margin:0; font-size:16px;}.docs-admin p {font-size:11px; color:#718097;}.docs-admin textarea {min-height:95px;}.docs-login {max-width:400px; margin:8vh auto; padding:25px;}.docs-login h1 {margin:0 0 8px;}.docs-login p {font-size:12px; color:#74829a;}.docs-login form {display:grid; gap:8px;}
+@media(max-width:950px) {.docs-editor-grid {grid-template-columns:1fr;}.docs-preview {order:-1;}.docs-paper {min-height:0;}}
+@media(max-width:600px) {.docs-heading,.docs-editor-head,.docs-project-row {align-items:flex-start; flex-direction:column;}.docs-project-row > div:last-child {width:100%;}.docs-progress {flex-wrap:wrap;}.docs-progress progress {width:100%;}.docs-search {max-width:190px;}.docs-catalog {grid-template-columns:1fr;}}
+
 /* Structured answers keep the existing card language and blue accents. */
 .message-row.assistant .message-bubble { max-width: min(94%, 720px); width: min(94%, 720px); }
 .demo-label { display: inline-flex; margin: 0 0 8px; padding: 3px 7px; border-radius: 99px; color: #865d12; background: #fff5df; font-size: 10px; font-weight: 700; }
@@ -263,4 +312,5 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
   .panel-open svg { width: 18px; }
   .message-row.assistant .message-bubble { width: 100%; max-width: 100%; }
 }
+
 

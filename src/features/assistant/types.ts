@@ -2,13 +2,6 @@ export type Scenario = 'requirement' | 'document' | 'file-check' | 'approval'
 export interface FileReference { name: string; size: number; type: string }
 export type WorkspaceTab = 'sources' | 'document' | 'route'
 export interface WorkspaceState { open: boolean; tab: WorkspaceTab; selectedSourceId?: string }
-export interface ProjectDraft {
-  kind: 'working-group-order'
-  title: string
-  chair: string
-  projectType: 'general' | 'it'
-  status: 'collecting-data' | 'draft'
-}
 export interface SourceReference {
   id: string
   title: string
@@ -38,7 +31,7 @@ export interface ChatSession {
   title: string
   updatedAt: string
   messages: ChatMessage[]
-  project?: ProjectDraft
+  documentProjectId?: string
   sources?: SourceReference[]
   workspace?: WorkspaceState
 }
@@ -49,9 +42,10 @@ export interface ChatRequest {
   message: string
   scenario?: Scenario
   history: ChatMessage[]
-  context: { project?: ProjectDraft; workspace: WorkspaceState; file?: FileReference }
+  context: { documentProjectId?: string; workspace: WorkspaceState; file?: FileReference }
 }
 export type ChatResult =
-  | { status: 'completed'; conversationId: string; text: string; blocks: ChatBlock[]; sources: SourceReference[]; project?: ProjectDraft; workspace?: WorkspaceState; origin: 'demo' | 'api' }
+  | { status: 'completed'; conversationId: string; text: string; blocks: ChatBlock[]; sources: SourceReference[]; workspace?: WorkspaceState; origin: 'demo' | 'api' }
   | { status: 'not-configured' | 'error'; conversationId: string; message: string }
 export interface AssistantGateway { submit(request: ChatRequest): Promise<ChatResult> }
+

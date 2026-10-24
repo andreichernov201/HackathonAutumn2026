@@ -8,7 +8,9 @@ export const sessionStore = {
       const value = localStorage.getItem(STORAGE_KEY)
       if (!value) return []
       const parsed: unknown = JSON.parse(value)
-      return Array.isArray(parsed) ? (parsed as ChatSession[]) : []
+      // PR #1 kept a local ProjectDraft. Drop it on load: server DocumentProject
+      // is now the only editable source of document data.
+      return Array.isArray(parsed) ? (parsed as (ChatSession & {project?: unknown})[]).map(({project: _legacyProject, ...session}) => session) : []
     } catch {
       return []
     }
@@ -21,3 +23,4 @@ export const sessionStore = {
     }
   },
 }
+

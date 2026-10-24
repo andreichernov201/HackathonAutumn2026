@@ -1,8 +1,26 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      REGULA_DATA_DIR: /data
+      REGULA_SESSION_SECRET: ${REGULA_SESSION_SECRET:?set REGULA_SESSION_SECRET}
+      REGULA_USER_PASSWORD: ${REGULA_USER_PASSWORD:?set REGULA_USER_PASSWORD}
+      REGULA_ADMIN_PASSWORD: ${REGULA_ADMIN_PASSWORD:?set REGULA_ADMIN_PASSWORD}
+      REGULA_SECURE_COOKIE: "0"
+    volumes:
+      - regula_data:/data
+    restart: unless-stopped
   web:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8080:8080"
+    depends_on:
+      - api
     restart: unless-stopped
+volumes:
+  regula_data:
+
