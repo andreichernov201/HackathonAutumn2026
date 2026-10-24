@@ -15,7 +15,7 @@
 
 ```sh
 sudo apt update
-sudo apt install -y ca-certificates curl ufw python3 tar gzip
+sudo apt install -y ca-certificates curl ufw python3 tar gzip git
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
@@ -71,7 +71,7 @@ sudo chmod 0440 /etc/sudoers.d/regula-deploy
 sudo visudo -cf /etc/sudoers.d/regula-deploy
 ```
 
-Перед установкой root-скриптов проверьте их в PR. Доступ пользователя `regula-deploy` ограничен записью во входящий каталог и этим sudo-правилом. Не заменяйте его членством в `docker`.
+Перед установкой root-скриптов проверьте их в PR. `regula-rollout` принимает от `regula-deploy` только проверенные digest образов, сам загружает Compose и Caddyfile из коммита, который входит в `main`, и сохраняет файлы в root-owned каталоге. Это не позволяет подменить Compose через входящий каталог. Доступ пользователя `regula-deploy` ограничен записью во входящий каталог и этим sudo-правилом. Не заменяйте его членством в `docker`. Серверу нужен исходящий HTTPS-доступ к публичному GitHub; при его недоступности выпуск не меняется.
 
 ## 3. Данные, домен и секреты сервера
 
@@ -100,7 +100,7 @@ sudo install -o root -g root -m 0600 deploy/regula.env.example /etc/regula/regul
 
 Отпечаток SSH-ключа получите через доверенную панель VPS/консоль провайдера и сравните с `ssh-keyscan -t ed25519 171.22.130.63`; сам `ssh-keyscan` без сравнения не подтверждает личность сервера. Приватный ключ в чате не отправляйте. Для приватных пакетов GHCR сервер получает короткоживущий `GITHUB_TOKEN` из job по SSH stdin, выполняет `docker login` и сразу `docker logout`; постоянный PAT на VPS не нужен. Если доступ `GITHUB_TOKEN` к пакету запрещён настройками GHCR, дайте пакету доступ к этому репозиторию; не делайте образы публичными ради обхода.
 
-При успешном push в `main`: npm `ci`/build, pytest и одноразовый Docker/browser/smoke стенд проходят первыми; два образа публикуются с тегами `sha-<commit>`, их digest передаются deploy job. Server использует именно digest, не изменяемый тег. В GitHub Actions проверьте jobs `build`, `api`, `docker`, `publish-api`, `publish-web`, `deploy`. Если `DEPLOY_ENABLED` не `true`, публикация есть, автоматического доступа к VPS нет. Не запускайте `scripts/compose-smoke.py` на production: он создаёт проекты и загружает тестовый файл.
+При успешном push в `main`: npm `ci`/build, pytest и одноразовый Docker/browser/smoke стенд проходят первыми; два образа публикуются с тегами `sha-<commit>`, их digest передаются deploy job. Сервер использует именно digest, не изменяемый тег. Compose-файлы и Caddyfile он берёт по тому же SHA из `main`, а не из каталога, доступного deploy-пользователю. В GitHub Actions проверьте jobs `build`, `api`, `docker`, `publish-api`, `publish-web`, `deploy`. Если `DEPLOY_ENABLED` не `true`, публикация есть, автоматического доступа к VPS нет. Не запускайте `scripts/compose-smoke.py` на production: он создаёт проекты и загружает тестовый файл.
 
 ## 5. Staging без домена
 
