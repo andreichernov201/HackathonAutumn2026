@@ -237,7 +237,7 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #93c5fd; outli
 .docs-form, .docs-preview {padding:19px;}.docs-form fieldset {border:0; padding:0; margin:18px 0 0; border-top:1px solid #e9eef6;}
 .docs-form legend {padding:14px 0 3px; font-size:13px; font-weight:700; color:#263650;}
 .docs-form label, .docs-login label {display:grid; gap:6px; margin:11px 0; font-size:11px; font-weight:650; color:#53647d;}
-.docs-form input, .docs-form textarea, .docs-login input, .docs-login select, .docs-admin input, .docs-admin textarea {width:100%; border:1px solid #dfe8f4; border-radius:8px; padding:9px 10px; color:#263650; background:#fff; font-size:12px;}
+.docs-form input, .docs-form textarea, .docs-form select, .docs-login input, .docs-login select, .docs-admin input, .docs-admin textarea {width:100%; border:1px solid #dfe8f4; border-radius:8px; padding:9px 10px; color:#263650; background:#fff; font-size:12px;}
 .docs-form textarea {min-height:80px; resize:vertical;}.docs-required {color:#d14343;}
 .docs-paper {border:1px solid #e5e9ef; background:#fff; min-height:520px; padding:27px; box-shadow:0 5px 18px #29384d0c; font-family:Georgia,serif;}
 .docs-paper > span {font:700 10px Inter,sans-serif; letter-spacing:.1em; color:#8a97aa;}.docs-paper h3 {margin:22px 0; text-align:center; font-size:18px;}

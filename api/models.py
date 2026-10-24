@@ -8,7 +8,8 @@ class FieldSpec(BaseModel):
     section: str
     required: bool = True
     multiline: bool = False
-    inputType: Literal['text', 'date'] = 'text'
+    inputType: Literal['text', 'date', 'select'] = 'text'
+    options: list[str] = Field(default_factory=list)
 
 class Template(BaseModel):
     templateId: str
@@ -57,7 +58,7 @@ class DocumentProject(BaseModel):
 
 class CreateProject(BaseModel):
     templateId: str
-    title: str = Field(default='Новый проект распоряжения', max_length=200)
+    title: str = Field(default='', max_length=200)
 
 class PatchFields(BaseModel):
     model_config = ConfigDict(extra='forbid')

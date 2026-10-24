@@ -1,4 +1,4 @@
-export interface FieldSpec { key: string; label: string; section: string; required: boolean; multiline: boolean; inputType: 'text' | 'date' }
+export interface FieldSpec { key: string; label: string; section: string; required: boolean; multiline: boolean; inputType: 'text' | 'date' | 'select'; options: string[] }
 export interface DocumentTemplate { templateId: string; title: string; kind: string; templateVersion: string | null; sourceStatus: 'awaiting_source' | 'awaiting_review' | 'awaiting_schema' | 'ready'; registryStatus: 'unverified'; sourceFilename: string | null; sourceSha256: string | null; fields: FieldSpec[]; note: string }
 export interface ValidationIssue { code: string; field: string | null; message: string }
 export interface Validation { ready: boolean; completed: number; total: number; issues: ValidationIssue[] }

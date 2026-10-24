@@ -29,8 +29,9 @@ def test_catalog_project_lifecycle_and_device_isolation():
     assert len(catalog) == 7
     assert catalog[0]['sourceStatus'] == 'ready'
     assert catalog[0]['registryStatus'] == 'unverified'
-    assert catalog[1]['sourceStatus'] == 'awaiting_schema'
-    assert client.post('/api/document-projects', json={'templateId': catalog[1]['templateId']}, headers=headers).status_code == 422
+    assert all(item['sourceStatus'] == 'ready' for item in catalog)
+    other_template = client.post('/api/document-projects', json={'templateId': catalog[1]['templateId']}, headers=headers)
+    assert other_template.status_code == 200 and not other_template.json()['validation']['ready']
     created = client.post('/api/document-projects', json={'templateId': catalog[0]['templateId']}, headers=headers)
     assert created.status_code == 200
     project = created.json()
