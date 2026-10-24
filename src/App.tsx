@@ -209,7 +209,7 @@ export default function App() {
         id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
         text: `Создан проект «${project.title}». Он открыт в редакторе; связь с этим чатом сохранена.`,
       }
-      updateSession(id, session => ({...session, documentProjectId: project.projectId, updatedAt: time, messages: [...session.messages, reply], workspace: {open: true, tab: 'document'}}))
+      updateSession(id, session => ({...session, documentProjectId: project.projectId, updatedAt: time, messages: [...session.messages, reply], workspace: {open: !template, tab: 'document'}}))
     }
     setSelectedDocumentId(project.projectId)
     if (templateId !== 'working-group-order') {
