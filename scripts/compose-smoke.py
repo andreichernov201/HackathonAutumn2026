@@ -1,11 +1,13 @@
 """HTTP acceptance against a disposable Compose stack; standard library only."""
 import hashlib
 import http.cookiejar
+import http.client
 import io
 import json
 import os
 import urllib.error
 import urllib.request
+import urllib.parse
 import zipfile
 
 BASE = os.getenv('REGULA_TEST_URL', 'http://127.0.0.1:8080')
@@ -75,7 +77,21 @@ metadata = json.dumps({'title': 'Compose boundary fixture', 'category': 'other'}
 body = (f'--{boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{metadata}\r\n--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="boundary.txt"\r\nContent-Type: text/plain\r\n\r\n'.encode() + content + f'\r\n--{boundary}--\r\n'.encode())
 created = request('/api/knowledge/documents', raw=body, method='POST', content_type=f'multipart/form-data; boundary={boundary}', expected=201)
 assert hashlib.sha256(request(created['latestVersion']['originalUrl'])).hexdigest() == created['latestVersion']['checksum']
-request('/api/knowledge/documents', raw=b'x' * (22 * 1024 * 1024 + 1), method='POST', content_type='application/octet-stream', expected=413)
+# A file above 20 MiB is rejected by the service even while the complete
+# multipart request still fits under the 22 MiB transport envelope.
+suffix = f'\r\n--{boundary}--\r\n'.encode()
+request('/api/knowledge/documents', raw=body[:-len(suffix)] + b' ' + suffix, method='POST', content_type=f'multipart/form-data; boundary={boundary}', expected=422)
+# Check early rejection from headers without writing a huge body after the
+# server has already closed the connection (urllib would report BrokenPipe).
+endpoint = urllib.parse.urlsplit(BASE + '/api/knowledge/documents')
+connection = (http.client.HTTPSConnection if endpoint.scheme == 'https' else http.client.HTTPConnection)(endpoint.netloc, timeout=30)
+try:
+    connection.request('POST', endpoint.path, headers={'Content-Length': str(22 * 1024 * 1024 + 1)})
+    response = connection.getresponse()
+    assert response.status == 413, response.status
+    response.read()
+finally:
+    connection.close()
 request('/api/knowledge/admin-session', method='DELETE')
 assert request('/api/session') == session
 assert len(request('/api/document-projects')) == original_project_count + 7
