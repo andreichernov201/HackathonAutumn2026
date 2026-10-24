@@ -1,15 +1,15 @@
 import os
 import secrets
-import json
+from uuid import uuid4
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import FastAPI, Cookie, Depends, File, Form, Header, HTTPException, Response, UploadFile
+from fastapi import FastAPI, Cookie, Depends, File, Header, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel
 
-from .models import ArtifactArg, CreateProject, DocumentProject, Login, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
+from .models import ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
 from .service import DocumentsService, TEMPLATE_ID
 
 app = FastAPI(title='Regula AI Documents API', version='0.1.0')
@@ -17,15 +17,14 @@ service = DocumentsService(Path(os.getenv('REGULA_DATA_DIR', './data')))
 secret = os.getenv('REGULA_SESSION_SECRET', 'local-development-only-change-me')
 signer = URLSafeTimedSerializer(secret)
 
-def actor(regula_session: str | None = Cookie(default=None), x_csrf_token: str | None = Header(default=None)):
-    if not regula_session:
-        raise HTTPException(401, 'authentication_required')
+def actor(response: Response, regula_session: str | None = Cookie(default=None)):
     try:
-        data = signer.loads(regula_session, max_age=60 * 60 * 12)
+        data = signer.loads(regula_session, max_age=60 * 60 * 24 * 365) if regula_session else None
     except BadSignature:
-        raise HTTPException(401, 'invalid_session')
-    if not isinstance(data, dict) or data.get('role') not in ('user', 'admin'):
-        raise HTTPException(401, 'invalid_session')
+        data = None
+    if not isinstance(data, dict) or not data.get('deviceId') or not data.get('csrf'):
+        data = {'deviceId': str(uuid4()), 'csrf': secrets.token_urlsafe(24)}
+        response.set_cookie('regula_session', signer.dumps(data), max_age=60*60*24*365, httponly=True, secure=os.getenv('REGULA_SECURE_COOKIE') == '1', samesite='lax')
     return data
 
 def mutation(user=Depends(actor), x_csrf_token: str | None = Header(default=None)):
@@ -34,16 +33,16 @@ def mutation(user=Depends(actor), x_csrf_token: str | None = Header(default=None
     return user
 
 def admin(user=Depends(mutation)):
-    if user['role'] != 'admin':
-        raise HTTPException(403, 'admin_required')
-    return user
+    # Template replacement is disabled in the anonymous demo. Deployments can
+    # add corporate authentication before exposing this maintenance action.
+    raise HTTPException(403, 'template_upload_disabled')
 
 def project_or_404(user, project_id):
     try:
         UUID(project_id)
     except ValueError:
         raise HTTPException(404, 'project_not_found')
-    project = service.get(user['username'], project_id)
+    project = service.get(user['deviceId'], project_id)
     if not project:
         raise HTTPException(404, 'project_not_found')
     return project
@@ -53,23 +52,9 @@ def error(exc: ValueError):
     status = 409 if code == 'version_conflict' else 422
     raise HTTPException(status, code)
 
-@app.post('/api/session/login')
-def login(body: Login, response: Response):
-    expected = os.getenv('REGULA_ADMIN_PASSWORD' if body.username == 'admin' else 'REGULA_USER_PASSWORD')
-    if not expected or not secrets.compare_digest(body.password, expected):
-        raise HTTPException(401, 'invalid_credentials')
-    csrf = secrets.token_urlsafe(24)
-    response.set_cookie('regula_session', signer.dumps({'username': body.username, 'role': body.username, 'csrf': csrf}), max_age=43200, httponly=True, secure=os.getenv('REGULA_SECURE_COOKIE') == '1', samesite='lax')
-    return {'username': body.username, 'role': body.username, 'csrfToken': csrf}
-
 @app.get('/api/session')
 def session(user=Depends(actor)):
-    return {'username': user['username'], 'role': user['role'], 'csrfToken': user['csrf']}
-
-@app.post('/api/session/logout')
-def logout(response: Response, user=Depends(mutation)):
-    response.delete_cookie('regula_session')
-    return {'ok': True}
+    return {'deviceId': user['deviceId'], 'csrfToken': user['csrf']}
 
 @app.get('/api/document-templates', response_model=list[Template])
 def list_templates(user=Depends(actor)):
@@ -107,13 +92,13 @@ def approve_source(template_id: str, user=Depends(admin)):
 @app.post('/api/document-projects', response_model=DocumentProject)
 def create_project(body: CreateProject, user=Depends(mutation)):
     try:
-        return service.create(user['username'], body.templateId, body.title)
+        return service.create(user['deviceId'], body.templateId, body.title)
     except ValueError as exc:
         error(exc)
 
 @app.get('/api/document-projects', response_model=list[DocumentProject])
 def list_projects(user=Depends(actor)):
-    return service.list_projects(user['username'])
+    return service.list_projects(user['deviceId'])
 
 @app.get('/api/document-projects/{project_id}', response_model=DocumentProject)
 def get_project(project_id: str, user=Depends(actor)):
@@ -123,7 +108,7 @@ def get_project(project_id: str, user=Depends(actor)):
 def update_fields(project_id: str, body: PatchFields, user=Depends(mutation)):
     project_or_404(user, project_id)
     try:
-        return service.patch(user['username'], project_id, body.expectedVersion, body.fields, body.title)
+        return service.patch(user['deviceId'], project_id, body.expectedVersion, body.fields, body.title)
     except ValueError as exc:
         error(exc)
 
@@ -133,7 +118,9 @@ def preview_project(project_id: str, body: PreviewFields, user=Depends(mutation)
     allowed = {spec.key for spec in service.template(TEMPLATE_ID).fields}
     if any(key not in allowed or len(value) > 4000 for key, value in body.fields.items()):
         raise HTTPException(422, 'invalid_fields')
-    return service.preview(body.fields)
+    project = project_or_404(user, project_id)
+    template = service.template(project.templateId)
+    return {'preview': service.preview(body.fields), 'validation': service._validation(body.fields, template, project.templateVersion)}
 
 @app.post('/api/document-projects/{project_id}/validate', response_model=DocumentProject)
 def validate_project(project_id: str, user=Depends(mutation)):
@@ -143,7 +130,7 @@ def validate_project(project_id: str, user=Depends(mutation)):
 def generate_project(project_id: str, user=Depends(mutation)):
     project_or_404(user, project_id)
     try:
-        return service.generate(user['username'], project_id)
+        return service.generate(user['deviceId'], project_id)
     except ValueError as exc:
         error(exc)
 
@@ -158,7 +145,7 @@ def download(project_id: str, artifact_id: str, user=Depends(actor)):
         UUID(artifact_id)
     except ValueError:
         raise HTTPException(404, 'artifact_not_found')
-    found = service.artifact(user['username'], project_id, artifact_id)
+    found = service.artifact(user['deviceId'], project_id, artifact_id)
     if not found or not found[0].is_file():
         raise HTTPException(404, 'artifact_not_found')
     return FileResponse(found[0], filename=found[1], media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', headers={'X-Content-Type-Options': 'nosniff'})
@@ -212,7 +199,7 @@ def invoke_tool(tool_name: str, call: ToolCall, user=Depends(mutation)):
         args = model.model_validate(call.arguments).model_dump() if model else {}
     except ValidationError:
         raise HTTPException(422, 'invalid_tool_arguments')
-    owner = user['username']
+    owner = user['deviceId']
     try:
         if tool_name == 'list_templates': return service.list_templates()
         if tool_name == 'get_template':

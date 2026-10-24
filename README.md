@@ -8,18 +8,18 @@
 
 ```sh
 cp .env.example .env
-# Замените все три значения в .env на свои секреты и пароли.
+# Укажите длинный случайный REGULA_SESSION_SECRET в .env.
 docker compose up --build
 ```
 
-Откройте http://127.0.0.1:8080, раздел «Документы». Вход `user` или `admin` с паролем из `.env`. Данные лежат в Docker volume `regula_data`. OpenAPI: http://127.0.0.1:8080/api/docs и `/api/openapi.json`.
+Откройте http://127.0.0.1:8080, раздел «Документы». Вход не требуется: каждому браузеру выдаётся отдельное демо-пространство через подписанную HttpOnly cookie. Проекты хранятся на сервере в Docker volume `regula_data`; удаление cookie или очистка данных сайта делает прежние проекты недоступными с этого браузера. OpenAPI: http://127.0.0.1:8080/api/docs и `/api/openapi.json`.
 
 Локальная разработка:
 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r api/requirements.txt
-REGULA_SESSION_SECRET=local-dev-secret REGULA_USER_PASSWORD=user REGULA_ADMIN_PASSWORD=admin .venv/bin/uvicorn api.main:app --reload --port 8000
+REGULA_SESSION_SECRET=local-dev-secret .venv/bin/uvicorn api.main:app --reload --port 8000
 npm ci
 npm run dev
 ```
@@ -36,8 +36,8 @@ Vite перенаправляет `/api` на FastAPI. Тесты: `.venv/bin/py
 | Проверить и сформировать | `POST /api/document-projects/{id}/validate`, `POST /api/document-projects/{id}/generate` |
 | Версии и файл | `GET /api/document-projects/{id}/versions`, `GET /api/document-projects/{id}/artifacts/{artifactId}/download` |
 | Реестр инструментов для AI | `GET /api/document-tools`, `POST /api/document-tools/{name}/invoke` |
-| Админ-загрузка новой версии | `POST /api/document-templates/{id}/source`, затем `/approve` после проверки |
+| Загрузка исходников | Отключена в открытом демо (`403`); включать только после добавления корпоративной авторизации |
 
-`PATCH` требует `expectedVersion` и возвращает `409 version_conflict` при конкурентной правке. Все действия проходят через `DocumentsService`, в том числе вызовы через реестр инструментов. Запросы и скачивание проверяют владельца. Реестр выдаёт разрешённые имена и JSON Schema аргументов; произвольный код от LLM не исполняется. Вход выдаёт подписанную HttpOnly cookie, изменения требуют CSRF-токен. Это локальная авторизация для прототипа; перед общедоступным развёртыванием нужны корпоративная идентификация, HTTPS и аудит.
+`PATCH` требует `expectedVersion` и возвращает `409 version_conflict` при конкурентной правке. Все действия проходят через `DocumentsService`, в том числе вызовы через реестр инструментов. Запросы и скачивание проверяют владельца. Реестр выдаёт разрешённые имена и JSON Schema аргументов; произвольный код от LLM не исполняется. Демо-сеанс выдаёт подписанную HttpOnly cookie, изменения требуют CSRF-токен. Это разделение браузеров, а не проверка личности: запуск ограничен `127.0.0.1`; перед общедоступным развёртыванием нужны корпоративная авторизация, HTTPS и аудит.
 
 Типы и клиент для фронтенда: `src/features/documents/types.ts`, `src/features/documents/api.ts`. Подробности: `docs/documents-api.md`. Qwen и RAG ещё не подключены. Исключение п. 1.3 Методических рекомендаций автоматически не применяется: актуальность утверждённого модуля в реестре не проверена.

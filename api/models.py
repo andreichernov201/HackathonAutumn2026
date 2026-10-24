@@ -85,6 +85,3 @@ class ArtifactArg(BaseModel):
     projectId: str
     artifactId: str
 
-class Login(BaseModel):
-    username: Literal['user', 'admin']
-    password: str

@@ -4,4 +4,4 @@ export interface ValidationIssue { code: string; field: string | null; message: 
 export interface Validation { ready: boolean; completed: number; total: number; issues: ValidationIssue[] }
 export interface DocumentArtifact { artifactId: string; projectVersion: number; createdAt: string; filename: string; sha256: string }
 export interface DocumentProject { projectId: string; templateId: string; templateVersion: string | null; title: string; fields: Record<string, string>; status: 'draft' | 'generated'; version: number; createdAt: string; updatedAt: string; sourceStatus: string; validation: Validation; artifacts: DocumentArtifact[]; preview: {section: string; label: string; value: string}[] }
-export interface Session { username: string; role: string; csrfToken: string }
+export interface Session { deviceId: string; csrfToken: string }

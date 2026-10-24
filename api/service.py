@@ -147,7 +147,8 @@ class DocumentsService:
             if not row: return None
             if row['version'] != expected: raise ValueError('version_conflict')
             merged = {**json.loads(row['fields']), **fields}
-            db.execute('UPDATE projects SET fields=?, title=?, status=?, version=version+1, updated=? WHERE id=? AND owner=? AND version=?', (json.dumps(merged, ensure_ascii=False), title.strip() if title is not None else row['title'], 'draft', now(), project_id, owner, expected))
+            result = db.execute('UPDATE projects SET fields=?, title=?, status=?, version=version+1, updated=? WHERE id=? AND owner=? AND version=?', (json.dumps(merged, ensure_ascii=False), title.strip() if title is not None else row['title'], 'draft', now(), project_id, owner, expected))
+            if result.rowcount != 1: raise ValueError('version_conflict')
         return self.get(owner, project_id)
 
     def _check_docx(self, content: bytes):
@@ -194,9 +195,14 @@ class DocumentsService:
         path.write_bytes(content)
         digest = hashlib.sha256(content).hexdigest()
         filename = f'proekt-rasporyazheniya-v{project.version}.docx'
-        with self.db() as db:
-            db.execute('INSERT INTO artifacts VALUES (?,?,?,?,?,?,?)', (artifact_id, project_id, owner, project.version, now(), filename, digest))
-            db.execute("UPDATE projects SET status='generated' WHERE id=? AND owner=?", (project_id, owner))
+        try:
+            with self.db() as db:
+                result = db.execute("UPDATE projects SET status='generated' WHERE id=? AND owner=? AND version=?", (project_id, owner, project.version))
+                if result.rowcount != 1: raise ValueError('version_conflict')
+                db.execute('INSERT INTO artifacts VALUES (?,?,?,?,?,?,?)', (artifact_id, project_id, owner, project.version, now(), filename, digest))
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
         return self.get(owner, project_id)
 
     def artifact(self, owner: str, project_id: str, artifact_id: str):

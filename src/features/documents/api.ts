@@ -1,4 +1,4 @@
-import type { DocumentProject, DocumentTemplate, Session } from './types'
+import type { DocumentProject, DocumentTemplate, Session, Validation } from './types'
 
 let csrfToken = ''
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -11,13 +11,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 export const documentsApi = {
   async session(): Promise<Session> { const session = await request<Session>('/api/session'); csrfToken = session.csrfToken; return session },
-  async login(username: 'user' | 'admin', password: string): Promise<Session> { const session = await request<Session>('/api/session/login', {method: 'POST', body: JSON.stringify({username, password})}); csrfToken = session.csrfToken; return session },
   templates: () => request<DocumentTemplate[]>('/api/document-templates'),
   projects: () => request<DocumentProject[]>('/api/document-projects'),
   get: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}`),
   create: (templateId: string, title?: string) => request<DocumentProject>('/api/document-projects', {method: 'POST', body: JSON.stringify({templateId, title})}),
   patch: (id: string, expectedVersion: number, fields: Record<string,string>, title?: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}`, {method: 'PATCH', body: JSON.stringify({expectedVersion, fields, title})}),
-  preview: (id: string, fields: Record<string,string>) => request<{section:string;label:string;value:string}[]>(`/api/document-projects/${encodeURIComponent(id)}/preview`, {method: 'POST', body: JSON.stringify({fields})}),
+  preview: (id: string, fields: Record<string,string>) => request<{preview: {section:string;label:string;value:string}[]; validation: Validation}>(`/api/document-projects/${encodeURIComponent(id)}/preview`, {method: 'POST', body: JSON.stringify({fields})}),
   validate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/validate`, {method: 'POST'}),
   generate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/generate`, {method: 'POST'}),
   download: async (id: string, artifactId: string, filename: string) => {
@@ -27,6 +26,4 @@ export const documentsApi = {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url)
   },
-  upload: (file: File) => { const form = new FormData(); form.append('file', file); return request<DocumentTemplate>('/api/document-templates/working-group-order/source', {method: 'POST', body: form}) },
-  approve: () => request<DocumentTemplate>('/api/document-templates/working-group-order/approve', {method: 'POST'}),
 }
