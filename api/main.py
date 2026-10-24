@@ -10,25 +10,32 @@ from fastapi.responses import JSONResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel
 
+from .config import session_secret
+from .limits import RequestSizeLimitMiddleware
+from .session import SESSION_MAX_AGE, write_session_cookie
+
 from .models import ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
 from .service import DocumentsService, TEMPLATE_ID
 from .knowledge.service import KnowledgeService, KnowledgeError
-from .knowledge.router import build_router
+from .knowledge.router import build_router, principal_for
+from .knowledge import tools as knowledge_tools
+from .tool_registry import ToolRegistry
 from .knowledge.seed import import_case_sources
 
 app = FastAPI(title='Regula AI API', version='0.2.0', docs_url='/api/docs', openapi_url='/api/openapi.json', redoc_url=None)
+secret = session_secret()
 service = DocumentsService(Path(os.getenv('REGULA_DATA_DIR', './data')))
-secret = os.getenv('REGULA_SESSION_SECRET', 'local-development-only-change-me')
+app.add_middleware(RequestSizeLimitMiddleware)
 signer = URLSafeTimedSerializer(secret)
 
 def actor(response: Response, regula_session: str | None = Cookie(default=None)):
     try:
-        data = signer.loads(regula_session, max_age=60 * 60 * 24 * 365) if regula_session else None
+        data = signer.loads(regula_session, max_age=SESSION_MAX_AGE) if regula_session else None
     except BadSignature:
         data = None
     if not isinstance(data, dict) or not data.get('deviceId') or not data.get('csrf'):
         data = {'deviceId': str(uuid4()), 'csrf': secrets.token_urlsafe(24)}
-        response.set_cookie('regula_session', signer.dumps(data), max_age=60*60*24*365, httponly=True, secure=os.getenv('REGULA_SECURE_COOKIE') == '1', samesite='lax')
+        write_session_cookie(response, signer, data)
     return data
 
 def mutation(user=Depends(actor), x_csrf_token: str | None = Header(default=None)):
@@ -47,12 +54,8 @@ def knowledge_error(request, exc):
 
 @app.middleware('http')
 async def knowledge_response_security(request, call_next):
-    if request.url.path.startswith('/api/knowledge/'):
-        length = request.headers.get('content-length', '')
-        if length.isdigit() and int(length) > 22 * 1024 * 1024:
-            return JSONResponse(status_code=413, content={'detail': 'invalid_file_size'})
     response = await call_next(request)
-    if request.url.path.startswith('/api/knowledge/'):
+    if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'private, no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
@@ -76,6 +79,11 @@ def error(exc: ValueError):
     code = str(exc)
     status = 409 if code == 'version_conflict' else 422
     raise HTTPException(status, code)
+
+@app.get('/api/health')
+def health():
+    return {'status': 'ok', 'model': 'not_configured'}
+
 
 @app.get('/api/session')
 def session(user=Depends(actor)):
@@ -139,7 +147,6 @@ def update_fields(project_id: str, body: PatchFields, user=Depends(mutation)):
 
 @app.post('/api/document-projects/{project_id}/preview')
 def preview_project(project_id: str, body: PreviewFields, user=Depends(mutation)):
-    project_or_404(user, project_id)
     project = project_or_404(user, project_id)
     allowed = {spec.key for spec in service.template(project.templateId).fields}
     if any(key not in allowed or len(value) > 4000 for key, value in body.fields.items()):
@@ -226,6 +233,8 @@ def invoke_tool(tool_name: str, call: ToolCall, user=Depends(mutation)):
     model, _ = TOOL_MODELS[tool_name]
     try:
         args = model.model_validate(call.arguments).model_dump() if model else {}
+        if model is None and call.arguments:
+            raise HTTPException(422, 'invalid_tool_arguments')
     except ValidationError:
         raise HTTPException(422, 'invalid_tool_arguments')
     owner = user['deviceId']
@@ -249,3 +258,26 @@ def invoke_tool(tool_name: str, call: ToolCall, user=Depends(mutation)):
             return {'downloadUrl': f"/api/document-projects/{args['projectId']}/artifacts/{args['artifactId']}/download", 'filename': found[1]}
     except ValueError as exc:
         error(exc)
+
+
+# A single allowlist for the future Qwen orchestrator. Existing service routes stay compatible.
+tool_registry = ToolRegistry()
+tool_registry.register(
+    [{**tool.model_dump(), 'readOnly': tool.name not in ('create_document_project', 'update_document_fields', 'generate_document_docx')}
+     for tool in list_tools(user={})],
+    lambda name, arguments, user: invoke_tool(name, ToolCall(arguments=arguments), user),
+)
+tool_registry.register(
+    knowledge_tools.definitions(),
+    lambda name, arguments, user: knowledge_tools.invoke(knowledge_service, principal_for(user), name, arguments),
+)
+
+
+@app.get('/api/tools')
+def all_tools(user=Depends(actor)):
+    return tool_registry.definitions()
+
+
+@app.post('/api/tools/{tool_name}/invoke')
+def invoke_registered_tool(tool_name: str, call: ToolCall, user=Depends(mutation)):
+    return tool_registry.invoke(tool_name, call.arguments, user)

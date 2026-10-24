@@ -1,5 +1,5 @@
 import type { DocumentProject, DocumentTemplate, Session, Validation } from './types'
-import { request, session } from '../../shared/http'
+import { request, requestResponse, session } from '../../shared/http'
 
 export const documentsApi = {
   async session(): Promise<Session> { return session() },
@@ -12,8 +12,7 @@ export const documentsApi = {
   validate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/validate`, {method: 'POST'}),
   generate: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/generate`, {method: 'POST'}),
   download: async (id: string, artifactId: string, filename: string) => {
-    const response = await fetch(`/api/document-projects/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}/download`, {credentials: 'same-origin'})
-    if (!response.ok) throw new Error('Не удалось скачать файл')
+    const response = await requestResponse(`/api/document-projects/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}/download`)
     const blob = await response.blob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url)

@@ -29,6 +29,7 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>()
+  const [documentOpenVersion, setDocumentOpenVersion] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const activeSession = sessions.find((item) => item.id === activeSessionId)
   const workspace = activeSession?.workspace ?? closedWorkspace
@@ -106,6 +107,7 @@ export default function App() {
       if (scenario === 'document' || /созда(ть|й|м|ю).*?(документ|распоряжен)/i.test(text)) {
         setSection('documents')
         setSelectedDocumentId(undefined)
+        setDocumentOpenVersion(value => value + 1)
         const reply: ChatMessage = {id: crypto.randomUUID(), role: 'assistant', text: 'Открыл раздел «Документы». Выберите модуль и создайте серверный проект. Затем его можно открыть обратно в чате.', createdAt: new Date().toISOString(), origin: 'api'}
         updateSession(id, session => ({...session, messages: [...session.messages, reply]}))
         return
@@ -178,16 +180,17 @@ export default function App() {
         workspaceOpen={section === 'assistant' && workspace.open} canOpenWorkspace={Boolean(activeSession)} onWorkspace={() => activeSessionId && updateSession(activeSessionId, (session) => ({ ...session, workspace: { ...session.workspace ?? closedWorkspace, open: true } }))} />
       {section === 'assistant'
         ? activeSession
-          ? <ConversationView session={activeSession} onSource={selectSource} onStartDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setSection('documents')}} />
+          ? <ConversationView session={activeSession} onSource={selectSource} onStartDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setDocumentOpenVersion(value => value + 1); setSection('documents')}} />
           : <WelcomeView onChooseScenario={chooseScenario} />
-        : section === 'documents' ? <DocumentsPage initialProjectId={selectedDocumentId} onOpenChat={openDocumentInChat} /> : section === 'knowledge' ? null : <SectionView section={section} onChooseScenario={chooseScenario} />}
+        : section === 'documents' || section === 'knowledge' ? null : <SectionView section={section} onChooseScenario={chooseScenario} />}
+      <div className="documents-host" hidden={section !== 'documents'}><DocumentsPage initialProjectId={selectedDocumentId} openVersion={documentOpenVersion} onOpenChat={openDocumentInChat} /></div>
       <div className="knowledge-host" hidden={section !== 'knowledge'}><KnowledgePage onAsk={askKnowledge}/></div>
       {requestError && <p className="request-error" role="alert">{requestError}</p>}
       {section === 'assistant' && <Composer inputRef={inputRef} draft={draft} file={file} scenario={scenario} submitting={submitting}
         onDraft={setDraft} onFile={setFile} onScenario={setScenario} onSubmit={() => void submit()} />
       }
     </main>
-    {section === 'assistant' && activeSession && <WorkspacePanel state={workspace} sources={activeSession.sources ?? []} documentProjectId={activeSession.documentProjectId} onOpenDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setSection('documents')}}
+    {section === 'assistant' && activeSession && <WorkspacePanel state={workspace} sources={activeSession.sources ?? []} documentProjectId={activeSession.documentProjectId} onOpenDocument={() => {setSelectedDocumentId(activeSession.documentProjectId); setDocumentOpenVersion(value => value + 1); setSection('documents')}}
       onOpenKnowledge={(sectionId) => {setSection('knowledge'); location.hash = `knowledge/sections/${sectionId}`}}
       onClose={() => updateSession(activeSession.id, (session) => ({ ...session, workspace: { ...session.workspace ?? closedWorkspace, open: false } }))}
       onTab={setWorkspaceTab} />}

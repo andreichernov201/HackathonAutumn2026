@@ -6,8 +6,8 @@ import type { DocumentProject, DocumentTemplate } from '../features/documents/ty
 const statusLabel = {awaiting_source: 'Ожидает исходный DOCX', awaiting_review: 'Ожидает проверки', awaiting_schema: 'Схема готовится', ready: 'Источник подключён'}
 const errorLabel: Record<string,string> = { version_conflict: 'Проект изменился в другом окне. Сравните правки перед повторным сохранением.', validation_failed: 'Заполните обязательные поля и проверьте источник.', source_not_ready: 'Исходный DOCX ещё не готов.', csrf_required: 'Сеанс изменился. Обновите страницу.' }
 
-interface Props { initialProjectId?: string; onOpenChat: (project: DocumentProject) => void }
-export function DocumentsPage({initialProjectId, onOpenChat}: Props) {
+interface Props { initialProjectId?: string; openVersion?: number; onOpenChat: (project: DocumentProject) => void }
+export function DocumentsPage({initialProjectId, openVersion, onOpenChat}: Props) {
   const [loading, setLoading] = useState(true)
   const editRevision = useRef(0)
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
@@ -24,7 +24,7 @@ export function DocumentsPage({initialProjectId, onOpenChat}: Props) {
     setTemplates(nextTemplates); setProjects(nextProjects)
     if (openId) setProject(await documentsApi.get(openId))
   }
-  useEffect(() => { documentsApi.session().then(() => load(initialProjectId)).catch(showError).finally(() => setLoading(false)) }, [initialProjectId])
+  useEffect(() => { if (!initialProjectId) setProject(null); documentsApi.session().then(() => load(initialProjectId)).catch(showError).finally(() => setLoading(false)) }, [initialProjectId, openVersion])
   useEffect(() => {
     if (!project) return
     const id = project.projectId, snapshot = project.fields
@@ -56,8 +56,10 @@ export function DocumentsPage({initialProjectId, onOpenChat}: Props) {
   }
   async function action(kind: 'validate' | 'generate') {
     if (!project) return
+    const revision = editRevision.current
+    const snapshot = project
     setBusy(true); setError('')
-    try { const next = await documentsApi[kind](project.projectId); setProject(next); await load(); } catch(cause) {showError(cause)} finally {setBusy(false)}
+    try { const next = await documentsApi[kind](snapshot.projectId); setProject(current => current?.projectId !== next.projectId ? current : editRevision.current !== revision ? {...next, title: current.title, fields: current.fields, preview: current.preview, validation: current.validation} : next); await load(); } catch(cause) {showError(cause)} finally {setBusy(false)}
   }
   if (loading) return <div className="docs-page"><h1>Документы</h1><p>Загружаем рабочее пространство…</p></div>
   return <div className="docs-page">

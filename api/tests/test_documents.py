@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 os.environ['REGULA_DATA_DIR'] = tempfile.mkdtemp(prefix='regula-tests-')
-os.environ['REGULA_SESSION_SECRET'] = 'test-secret-long-enough'
+os.environ['REGULA_SESSION_SECRET'] = 'test-secret-long-enough-at-least-32-characters'
 
 from fastapi.testclient import TestClient
 from docx import Document

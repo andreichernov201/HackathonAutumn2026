@@ -278,8 +278,8 @@ def preview(template_id: str, source: bytes, fields: dict[str, str]):
             point = re.match(r'^(\d+(?:\.\d+)?)\.', content)
             label = first_labels.get(index) or (f'Пункт {point.group(1)}' if point else 'Текст документа')
             items.append({'section': 'Текст', 'label': label, 'value': content})
-    for table in document.tables:
-        if len(table.rows) > 2:
+    for table_index, table in enumerate(document.tables):
+        if len(table.rows) > 2 or (template_id == 'records-officers-order' and table_index == 1):
             for row in table.rows[1:]:
                 items.append({'section': 'Состав', 'label': row.cells[0].text.strip(), 'value': row.cells[1].text.strip()})
     return items

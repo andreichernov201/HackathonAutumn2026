@@ -6,9 +6,16 @@ services:
     environment:
       REGULA_DATA_DIR: /data
       REGULA_SESSION_SECRET: ${REGULA_SESSION_SECRET:?set REGULA_SESSION_SECRET}
-      REGULA_SECURE_COOKIE: "0"
+      REGULA_ENV: ${REGULA_ENV:-development}
+      REGULA_SECURE_COOKIE: ${REGULA_SECURE_COOKIE:-0}
       REGULA_KNOWLEDGE_ADMIN_TOKEN: ${REGULA_KNOWLEDGE_ADMIN_TOKEN:-}
       REGULA_IMPORT_CASE_CORPUS: ${REGULA_IMPORT_CASE_CORPUS:-1}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      start_period: 20s
+      retries: 12
     volumes:
       - regula_data:/data
     restart: unless-stopped
@@ -19,7 +26,8 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 volumes:
   regula_data:

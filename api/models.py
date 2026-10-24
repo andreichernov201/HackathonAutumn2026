@@ -56,7 +56,10 @@ class DocumentProject(BaseModel):
     artifacts: list[Artifact]
     preview: list[dict[str, str]]
 
-class CreateProject(BaseModel):
+class StrictInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+class CreateProject(StrictInput):
     templateId: str
     title: str = Field(default='', max_length=200)
 
@@ -70,19 +73,19 @@ class PreviewFields(BaseModel):
     model_config = ConfigDict(extra='forbid')
     fields: dict[str, str]
 
-class ToolCall(BaseModel):
+class ToolCall(StrictInput):
     arguments: dict
 
-class ProjectIdArg(BaseModel):
+class ProjectIdArg(StrictInput):
     projectId: str
 
-class TemplateIdArg(BaseModel):
+class TemplateIdArg(StrictInput):
     templateId: str
 
 class UpdateFieldsArg(PatchFields):
     projectId: str
 
-class ArtifactArg(BaseModel):
+class ArtifactArg(StrictInput):
     projectId: str
     artifactId: str
 
