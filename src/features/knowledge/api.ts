@@ -9,31 +9,31 @@ function params(values: Record<string, string | number>) {
 }
 export const knowledgeApi = {
   async session() {await session(); return request<KnowledgeSession>('/api/knowledge/session')},
-  list: (filters: Filters, offset = 0) => request<Page<KnowledgeDocument>>('/api/knowledge/documents?' + params({...filters, offset, limit: 20})),
-  search: (q: string, filters: Filters, offset = 0) => {
+  list: (filters: Filters, offset = 0, q = '', signal?: AbortSignal) => request<Page<KnowledgeDocument>>('/api/knowledge/documents?' + params({...filters, q, offset, limit: 20}), {signal}),
+  search: (q: string, filters: Filters, offset = 0, signal?: AbortSignal) => {
     const {sort: _sort, ...rest} = filters
-    return request<Page<SearchHit> & {message: string | null}>('/api/knowledge/search?' + params({...rest, q, offset, limit: 20}))
+    return request<Page<SearchHit> & {message: string | null}>('/api/knowledge/search?' + params({...rest, q, offset, limit: 20}), {signal})
   },
-  get: (id: string) => request<KnowledgeDocument>(`/api/knowledge/documents/${encodeURIComponent(id)}`),
-  async versions(id: string) {
+  get: (id: string, signal?: AbortSignal) => request<KnowledgeDocument>(`/api/knowledge/documents/${encodeURIComponent(id)}`, {signal}),
+  async versions(id: string, signal?: AbortSignal) {
     const items: KnowledgeVersion[] = []
     let offset = 0
     while (true) {
-      const page = await request<Page<KnowledgeVersion>>(`/api/knowledge/documents/${encodeURIComponent(id)}/versions?offset=${offset}`)
+      const page = await request<Page<KnowledgeVersion>>(`/api/knowledge/documents/${encodeURIComponent(id)}/versions?offset=${offset}`, {signal})
       items.push(...page.items); offset += page.items.length
       if (offset >= page.total || !page.items.length) return items
     }
   },
-  async sections(id: string) {
+  async sections(id: string, signal?: AbortSignal) {
     const items: SectionSummary[] = []
     let offset = 0
     while (true) {
-      const page = await request<Page<SectionSummary>>(`/api/knowledge/versions/${encodeURIComponent(id)}/sections?offset=${offset}`)
+      const page = await request<Page<SectionSummary>>(`/api/knowledge/versions/${encodeURIComponent(id)}/sections?offset=${offset}`, {signal})
       items.push(...page.items); offset += page.items.length
       if (offset >= page.total || !page.items.length) return items
     }
   },
-  section: (id: string) => request<KnowledgeSection>(`/api/knowledge/sections/${encodeURIComponent(id)}`),
+  section: (id: string, signal?: AbortSignal) => request<KnowledgeSection>(`/api/knowledge/sections/${encodeURIComponent(id)}`, {signal}),
   upload: (file: File, metadata: Record<string, unknown>, documentId?: string) => {
     const body = new FormData(); body.append('file', file); body.append('metadata', JSON.stringify(metadata))
     return request<KnowledgeDocument>(documentId ? `/api/knowledge/documents/${encodeURIComponent(documentId)}/versions` : '/api/knowledge/documents', {method: 'POST', body})

@@ -43,6 +43,7 @@ class KnowledgeService:
     def db(self):
         db = sqlite3.connect(self.db_path, timeout=15)
         db.row_factory = sqlite3.Row
+        db.create_function('casefold', 1, lambda value: value.casefold(), deterministic=True)
         db.execute('PRAGMA foreign_keys=ON')
         try:
             with db:
@@ -108,6 +109,9 @@ class KnowledgeService:
 
     def list_knowledge_documents(self, principal: Principal, args: ListArgs) -> DocumentPage:
         where, params = self._filters(args, principal)
+        if args.q and args.q.strip():
+            where += " AND instr(casefold(d.title || ' ' || d.description || ' ' || COALESCE(d.owner,'')), ?) > 0"
+            params.append(args.q.strip().casefold())
         order = {'title': 'd.title COLLATE NOCASE ASC', 'createdAt': 'd.created_at DESC', 'updatedAt': 'd.updated_at DESC'}[args.sort]
         with self.db() as db:
             base = f'FROM knowledge_documents d JOIN knowledge_versions v ON v.document_id=d.id WHERE {where}'

@@ -1,11 +1,8 @@
 import { expect, test } from '@playwright/test'
 
 test('original PDF pages, zoom, full-document search and return to cited text', async ({ page }, testInfo) => {
-  await page.goto('/')
-  await page.getByRole('button', {name: 'База знаний', exact: true}).click()
-  await page.getByRole('button', {name: 'Инструкция по документационному обеспечению управления и документообороту Организации', exact: true}).click()
   const workerResponse = page.waitForResponse(response => /pdf\.worker.*\.mjs$/.test(response.url()))
-  await page.getByRole('button', {name: 'PDF оригинал', exact: true}).click()
+  await page.goto('/#knowledge')
   expect((await workerResponse).headers()['content-type']).toMatch(/javascript/)
   const viewer = page.getByRole('region', {name: 'Просмотр PDF'})
   await expect(viewer.getByRole('button', {name: 'Следующая страница PDF'})).toBeEnabled({timeout: 30000})
@@ -31,7 +28,7 @@ test('original PDF pages, zoom, full-document search and return to cited text', 
   await page.screenshot({path: testInfo.outputPath('pdf-viewer.png')})
   await viewer.getByRole('button', {name: 'Свернуть PDF', exact: true}).click()
   await expect(page.locator('.document-viewer:fullscreen')).toHaveCount(0)
-  await page.getByRole('button', {name: 'Текст по пунктам', exact: true}).click()
+  await page.getByRole('tab', {name: 'Содержание', exact: true}).click()
   await expect(page.getByRole('navigation', {name: 'Содержание документа'})).toBeVisible()
-  await expect(page.getByRole('button', {name: 'Спросить AI об этом пункте'})).toBeVisible()
+  await expect(page.getByRole('button', {name: /^Спросить AI:/}).first()).toBeVisible()
 })

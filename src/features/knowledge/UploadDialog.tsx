@@ -35,9 +35,9 @@ export function UploadDialog({document: existing, onClose, onDone}: {document?: 
       <p className="kb-muted">Оригинал сохраняется локально. Текст извлекается без внешних AI API. Не указывайте неизвестные даты и редакции.</p>
       {existing ? <p className="kb-note">{existing.title}. Предыдущие редакции и ссылки сохранятся.</p> : <>
         <label>Название документа<input name="title" required maxLength={300}/></label>
-        <div className="kb-form-row"><label>Категория<select name="category">{Object.entries(categories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>Уровень доступа<select name="accessLevel"><option value="internal">Читатели демо-системы</option><option value="restricted">Только администраторы базы</option></select></label></div>
+        <div className="kb-form-row"><label>Категория<select name="category" aria-label="Категория">{Object.entries(categories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>Уровень доступа<select name="accessLevel" aria-label="Уровень доступа"><option value="internal">Читатели демо-системы</option><option value="restricted">Только администраторы базы</option></select></label></div>
         <label>Краткое описание<textarea name="description" maxLength={2000} rows={2}/></label>
-        <div className="kb-form-row"><label>Владелец, если известен<input name="owner" maxLength={200}/></label><label>Происхождение<select name="materialNature"><option value="synthetic">Синтетический учебный материал</option><option value="corporate">Корпоративный документ</option></select></label></div>
+        <div className="kb-form-row"><label>Владелец, если известен<input name="owner" maxLength={200}/></label><label>Происхождение<select name="materialNature" aria-label="Происхождение"><option value="synthetic">Синтетический учебный материал</option><option value="corporate">Корпоративный документ</option></select></label></div>
       </>}
       <label className="kb-file-field"><span><Upload size={19}/> PDF, DOCX или TXT · до 20 МБ</span><input name="file" type="file" required accept=".pdf,.docx,.txt" disabled={busy}/></label>
       <label>Обозначение редакции, если установлено<input name="versionLabel" maxLength={100} placeholder="Не установлено"/></label>

@@ -36,9 +36,9 @@ export default function App() {
 
   useEffect(() => sessionStore.save(sessions), [sessions])
   useEffect(() => {
-    const onHash = () => {if (location.hash.startsWith('#knowledge')) setSection('knowledge')}
-    onHash(); window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
+    const onHash = () => setSection(location.hash.startsWith('#knowledge') ? 'knowledge' : 'assistant')
+    onHash(); window.addEventListener('hashchange', onHash); window.addEventListener('popstate', onHash)
+    return () => {window.removeEventListener('hashchange', onHash); window.removeEventListener('popstate', onHash)}
   }, [])
 
   function updateSession(id: string, update: (session: ChatSession) => ChatSession) {
@@ -146,18 +146,18 @@ export default function App() {
     setActiveSessionId(id); setSelectedDocumentId(project.projectId); setSection('assistant')
   }
 
-  function askKnowledge(source: KnowledgeCitation) {
+  function askKnowledge(source: KnowledgeCitation, scope: 'document' | 'section' = 'section') {
     const id = crypto.randomUUID()
     const time = new Date().toISOString()
     const session: ChatSession = {
       id, title: source.title.slice(0, 54), updatedAt: time, knowledgeSource: source,
       sources: [source], workspace: {open: true, tab: 'sources', selectedSourceId: source.id},
       messages: [{id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
-        text: 'Источник закреплён в контексте диалога. Оригинальный пункт доступен справа. Автоматическое объяснение требует подключения AI-сервиса.',
+        text: scope === 'document' ? 'Документ выбран для обсуждения. В контексте закреплены его редакция и начальный извлечённый пункт. Полный оригинал доступен в базе знаний; AI-сервис пока не подключён.' : 'Источник закреплён в контексте диалога. Оригинальный пункт доступен справа. Автоматическое объяснение требует подключения AI-сервиса.',
         blocks: [{type: 'citation', sourceId: source.id}]}],
     }
     setSessions(previous => [session, ...previous]); setActiveSessionId(id)
-    setSection('assistant'); setDraft('Объясни этот пункт простым языком: ' + source.locator)
+    setSection('assistant'); setDraft(scope === 'document' ? `Помоги разобраться с документом «${source.title}», редакция: ${source.versionLabel || 'не установлена'}.` : 'Объясни этот пункт простым языком: ' + source.locator)
     setScenario('requirement'); setFile(null); setRequestError('')
     history.pushState(null, '', location.pathname + location.search)
     requestAnimationFrame(() => inputRef.current?.focus())
@@ -171,11 +171,11 @@ export default function App() {
       activeSessionId={activeSessionId}
       onClose={() => setMobileOpen(false)}
       onNewChat={startNewChat}
-      onSection={(id) => { setSection(id); setMobileOpen(false) }}
-      onSession={(id) => { setActiveSessionId(id); setSection('assistant'); setMobileOpen(false) }}
+      onSection={(id) => {setSection(id); setMobileOpen(false); if (id === 'knowledge') {if (!location.hash.startsWith('#knowledge')) location.hash = '#knowledge'} else if (location.hash.startsWith('#knowledge')) history.pushState(null, '', location.pathname + location.search)}}
+      onSession={(id) => {setActiveSessionId(id); setSection('assistant'); setMobileOpen(false); if (location.hash.startsWith('#knowledge')) history.pushState(null, '', location.pathname + location.search)}}
       onClearHistory={() => { setSessions([]); setActiveSessionId(null); setRequestError('') }}
     />
-    <main className="main-panel">
+    <main className={`main-panel ${section === 'knowledge' ? 'main-panel-knowledge' : ''}`}>
       <Topbar section={section} onMenu={() => setMobileOpen(true)} onNewChat={startNewChat}
         workspaceOpen={section === 'assistant' && workspace.open} canOpenWorkspace={Boolean(activeSession)} onWorkspace={() => activeSessionId && updateSession(activeSessionId, (session) => ({ ...session, workspace: { ...session.workspace ?? closedWorkspace, open: true } }))} />
       {section === 'assistant'
@@ -184,7 +184,7 @@ export default function App() {
           : <WelcomeView onChooseScenario={chooseScenario} />
         : section === 'check' ? <ReviewPage/> : null}
       <div className="documents-host" hidden={section !== 'documents'}><DocumentsPage initialProjectId={selectedDocumentId} openVersion={documentOpenVersion} onOpenChat={openDocumentInChat} /></div>
-      <div className="knowledge-host" hidden={section !== 'knowledge'}><KnowledgePage onAsk={askKnowledge}/></div>
+      <div className="knowledge-host" hidden={section !== 'knowledge'}><KnowledgePage onAsk={askKnowledge} active={section === 'knowledge'}/></div>
       {requestError && <p className="request-error" role="alert">{requestError}</p>}
       {section === 'assistant' && <Composer inputRef={inputRef} draft={draft} file={file} scenario={scenario} submitting={submitting}
         onDraft={setDraft} onFile={setFile} onScenario={setScenario} onSubmit={() => void submit()} />

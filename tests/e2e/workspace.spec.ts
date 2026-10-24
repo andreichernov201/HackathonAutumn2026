@@ -52,7 +52,7 @@ test('document edits survive navigation and a delayed validation; chat opens sam
   await expect(title).toHaveValue('Правка во время проверки')
   await expect(page.locator('.docs-editor-head')).toContainText('несохранённые изменения')
   await page.getByRole('button', {name: 'База знаний', exact: true}).click()
-  await expect(page.locator('.kb-document-row')).toHaveCount(3)
+  await expect(page.locator('.kw-file-row')).toHaveCount(3)
   await page.getByRole('button', {name: 'Документы', exact: true}).click()
   await expect(title).toHaveValue('Правка во время проверки')
   await page.getByRole('button', {name: 'Сохранить', exact: true}).click()

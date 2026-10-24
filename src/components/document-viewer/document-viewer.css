@@ -42,3 +42,6 @@
 @media(max-width:700px){.dv-controls{gap:5px}.dv-toolbar{padding:8px}.dv-search>span{width:100%}.dv-stage{min-height:360px}.document-viewer button{padding:7px}.dv-panel-toggles{font-size:11px}}
 
 .review-file-picker {display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:16px;position:relative}.review-file-picker input {position:absolute;width:1px;height:1px;opacity:0}.review-file-picker:focus-within {outline:2px solid #2870d5;outline-offset:2px}.review-filename {margin-left:12px;font-size:13px;color:#62718b;overflow-wrap:anywhere}
+.dv-layout-drawer,.dv-drawer-main {min-width:0;min-height:0;height:100%}
+.dv-side-drawer {position:fixed;inset:0 0 0 auto;margin:0;border:0;border-left:1px solid #dce3ee;padding:0;width:min(360px,92vw);height:100dvh;max-height:100dvh;background:#f8fafc;color:#25354e;box-shadow:-10px 0 40px #24375422}
+.dv-side-drawer::backdrop {background:#172b4666}

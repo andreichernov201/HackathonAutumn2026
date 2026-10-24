@@ -31,8 +31,8 @@ def corpus(tmp_path, monkeypatch):
     return isolated
 
 
-def device(admin=False):
-    client = TestClient(app)
+def device(admin=False, host='testclient'):
+    client = TestClient(app, client=(host, 50000))
     session = client.get('/api/session').json()
     client.headers['X-CSRF-Token'] = session['csrfToken']
     if admin:
@@ -236,3 +236,20 @@ def test_fragments_and_long_text_are_not_invented_numbering():
     assert extracted.sections[0].number is None
     assert extracted.sections[0].confidence == 'fragment'
     assert extracted.warnings
+
+
+def test_catalog_metadata_query_has_unicode_acl_and_server_pagination(corpus):
+    admin = device(admin=True, host='catalog-metadata-test')
+    public = upload(admin, meta=metadata(title='Каталог А', description='Уникальный маркер ОПИСАНИЯ', owner='Куратор Петров'))
+    upload(admin, meta=metadata(title='Каталог Б', description='Уникальный маркер описания'))
+    upload(admin, meta=metadata(title='Секретный каталог', description='Уникальный маркер описания', accessLevel='restricted'))
+    reader = device()
+    found = reader.get('/api/knowledge/documents', params={'q': 'МАРКЕР описания', 'limit': 1}).json()
+    assert found['total'] == 2 and len(found['items']) == 1
+    second = reader.get('/api/knowledge/documents', params={'q': 'маркер описания', 'limit': 1, 'offset': 1}).json()
+    assert second['total'] == 2 and second['items'][0]['id'] != found['items'][0]['id']
+    assert admin.get('/api/knowledge/documents', params={'q': 'маркер описания'}).json()['total'] == 3
+    assert reader.get('/api/knowledge/documents', params={'q': 'ПЕТРОВ'}).json()['items'][0]['id'] == public.json()['id']
+    assert reader.get('/api/knowledge/documents', params={'q': "%' OR 1=1 --"}).json()['total'] == 0
+    assert reader.get('/api/knowledge/documents', params={'q': 'Каталог', 'fileType': 'pdf'}).json()['total'] == 0
+    assert reader.get('/api/knowledge/documents', params={'q': 'x' * 501}).status_code == 422

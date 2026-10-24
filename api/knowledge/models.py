@@ -147,6 +147,7 @@ class SearchArgs(StrictModel):
 
 
 class ListArgs(StrictModel):
+    q: str | None = Field(default=None, max_length=500)
     category: Category | None = None
     status: VersionStatus | None = None
     fileType: Literal['pdf', 'docx', 'txt'] | None = None
