@@ -11,6 +11,8 @@ import { DocumentsPage } from './components/DocumentsPage'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import type { KnowledgeCitation } from './features/knowledge/types'
 import type { DocumentProject } from './features/documents/types'
+import { documentsApi } from './features/documents/api'
+import { isOrderCreationCommand, recommendedOrderTemplateId } from './features/assistant/orderTemplates'
 import { assistantGateway } from './features/assistant/gateway'
 import { scenarios } from './features/assistant/scenarios'
 import { sessionStore } from './features/assistant/sessionStore'
@@ -29,6 +31,7 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>()
+  const [selectedDocument, setSelectedDocument] = useState<DocumentProject | undefined>()
   const [documentOpenVersion, setDocumentOpenVersion] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const activeSession = sessions.find((item) => item.id === activeSessionId)
@@ -134,14 +137,14 @@ export default function App() {
     setSubmitting(true)
 
     try {
-      if (scenario === 'document' || /созда(ть|й|м|ю).*?(документ|распоряжен)/i.test(text)) {
-        setSection('documents')
-        setSelectedDocumentId(undefined)
-        setDocumentOpenVersion((value) => value + 1)
+      if (scenario === 'document' || isOrderCreationCommand(text)) {
+        const templates = await documentsApi.templates()
+        const recommendedTemplateId = recommendedOrderTemplateId(text, templates)
         const reply: ChatMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          text: 'Открыл раздел «Документы». Выберите шаблон и создайте документ. Затем его можно открыть обратно в чате.',
+          text: recommendedTemplateId ? 'Нашёл подходящий модуль среди семи доступных DOCX-шаблонов. Создайте проект — он сразу откроется в редакторе.' : 'Выберите модуль из семи доступных DOCX-шаблонов. После создания проект сразу откроется в редакторе.',
+          blocks: [{type: 'template_suggestions', recommendedTemplateId, templates: templates.map(({templateId, title, kind, note, sourceStatus}) => ({templateId, title, kind, note, sourceStatus}))}],
           createdAt: new Date().toISOString(),
           origin: 'api',
         }
@@ -190,6 +193,52 @@ export default function App() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function createDocumentFromChat(templateId: string) {
+    const template = templateId === 'working-group-order' ? (await documentsApi.templates()).find(item => item.templateId === templateId) : undefined
+    const project = await documentsApi.create(templateId)
+    const id = activeSessionId
+    if (id) {
+      const time = new Date().toISOString()
+      const reply: ChatMessage = template ? {
+        id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
+        text: `Создан проект «${project.title}». Заполните его по шагам; после подтверждения откроется тот же проект в редакторе.`,
+        blocks: [{type: 'working_group_wizard', projectId: project.projectId, projectTitle: project.title, projectVersion: project.version, fields: project.fields, fieldSpecs: template.fields}],
+      } : {
+        id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
+        text: `Создан проект «${project.title}». Он открыт в редакторе; связь с этим чатом сохранена.`,
+      }
+      updateSession(id, session => ({...session, documentProjectId: project.projectId, updatedAt: time, messages: [...session.messages, reply], workspace: {open: !template, tab: 'document'}}))
+    }
+    setSelectedDocumentId(project.projectId)
+    if (templateId !== 'working-group-order') {
+      setSelectedDocument(undefined)
+      setDocumentOpenVersion(value => value + 1)
+      setSection('documents')
+    }
+  }
+
+  async function completeWorkingGroup(projectId: string, expectedVersion: number, fields: Record<string, string>) {
+    const project = await documentsApi.patch(projectId, expectedVersion, fields)
+    const id = activeSessionId
+    if (id) {
+      const time = new Date().toISOString()
+      const reply: ChatMessage = {id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api', text: `Реквизиты сохранены в проекте «${project.title}». Открываю его в редакторе.`}
+      updateSession(id, session => ({
+        ...session,
+        documentProjectId: project.projectId,
+        updatedAt: time,
+        messages: [
+          ...session.messages.map(message => ({...message, blocks: message.blocks?.map(block => block.type === 'working_group_wizard' && block.projectId === projectId ? {...block, completed: true} : block)})),
+          reply,
+        ],
+      }))
+    }
+    setSelectedDocumentId(project.projectId)
+    setSelectedDocument(project)
+    setDocumentOpenVersion(value => value + 1)
+    setSection('documents')
   }
 
   function openDocumentInChat(project: DocumentProject) {
@@ -319,10 +368,13 @@ export default function App() {
               session={activeSession}
               onSource={selectSource}
               onStartDocument={() => {
+                setSelectedDocument(undefined)
                 setSelectedDocumentId(activeSession.documentProjectId)
                 setDocumentOpenVersion((value) => value + 1)
                 setSection('documents')
               }}
+              onCreateDocument={createDocumentFromChat}
+              onCompleteWorkingGroup={completeWorkingGroup}
             />
           ) : (
             <div className="chat-empty">
@@ -340,6 +392,7 @@ export default function App() {
               setSection('assistant')
             }}
             onDocument={(id) => {
+              setSelectedDocument(undefined)
               setSelectedDocumentId(id)
               setDocumentOpenVersion((v) => v + 1)
               setSection('documents')
@@ -351,6 +404,7 @@ export default function App() {
         <div className="documents-host" hidden={section !== 'documents'}>
           <DocumentsPage
             initialProjectId={selectedDocumentId}
+            initialProject={selectedDocument}
             openVersion={documentOpenVersion}
             onOpenChat={openDocumentInChat}
           />
@@ -383,6 +437,7 @@ export default function App() {
           sources={activeSession.sources ?? []}
           documentProjectId={activeSession.documentProjectId}
           onOpenDocument={() => {
+            setSelectedDocument(undefined)
             setSelectedDocumentId(activeSession.documentProjectId)
             setDocumentOpenVersion((value) => value + 1)
             setSection('documents')
