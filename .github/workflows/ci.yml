@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -84,7 +85,7 @@ jobs:
         run: docker compose down --volumes --remove-orphans
 
   publish-api:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: [build, api, docker]
     runs-on: ubuntu-latest
     permissions:
@@ -110,7 +111,7 @@ jobs:
           tags: ghcr.io/andreichernov201/hackathonautumn2026-api:sha-${{ github.sha }}
 
   publish-web:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: [build, api, docker]
     runs-on: ubuntu-latest
     permissions:
@@ -136,7 +137,7 @@ jobs:
           tags: ghcr.io/andreichernov201/hackathonautumn2026-web:sha-${{ github.sha }}
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     needs: [publish-api, publish-web]
     runs-on: ubuntu-latest
     environment: production
