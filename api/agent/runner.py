@@ -19,21 +19,11 @@ from .models import ChatResult, FinalAnswer
 from .prompt import SYSTEM_PROMPT
 from .providers import ProviderError, make_provider
 from .store import ChatStore
+from .presentation import TOOL_LABELS, TEMPLATE_CHOICE_TEXT, document_summary, public_text
 
 logger = logging.getLogger('regula.agent')
 
-TOOL_LABELS = {
-    'search_knowledge': 'Ищу нормативные требования',
-    'get_knowledge_section': 'Читаю исходный пункт',
-    'verify_citation': 'Проверяю цитату',
-    'list_templates': 'Подбираю модуль',
-    'get_template': 'Получаю схему модуля',
-    'create_document_project': 'Создаю проект',
-    'get_document_project': 'Получаю актуальный проект',
-    'update_document_fields': 'Сохраняю реквизиты',
-    'validate_document_project': 'Проверяю реквизиты',
-    'generate_document_docx': 'Формирую DOCX',
-}
+
 
 
 def dumps(value):
@@ -101,6 +91,7 @@ class AgentRunner:
         knowledge_used = False
         final_answer = None
         confirmed = False
+        created_projects, changed_fields, validated_projects = set(), {}, set()
 
         def invoke(name, arguments):
             nonlocal project_id, tool_steps, knowledge_used
@@ -139,10 +130,13 @@ class AgentRunner:
                             raise HTTPException(409, 'read_project_before_update')
                         if project.templateVersion != self.documents.template(project.templateId).templateVersion:
                             raise HTTPException(409, 'template_version_changed')
+                    if name == 'generate_document_docx' and not project.validation.ready:
+                        raise HTTPException(422, 'validation_failed')
                     if name == 'generate_document_docx' and not confirmed:
                         confirmation = self.store.confirmation(owner, cid, project)
                         blocks.append(dict(type='clarification', question='Сформировать DOCX из сохранённой версии проекта?', fields=[], confirmation=confirmation))
                         raise HTTPException(409, 'confirmation_required')
+                before = self.documents.get(owner, arguments['projectId']) if name == 'update_document_fields' else None
                 result = jsonable_encoder(self.registry.invoke(name, arguments, user))
                 result = self._synthetic(result)
                 if name == 'list_templates':
@@ -155,6 +149,10 @@ class AgentRunner:
                     result = [{k: p[k] for k in ('projectId', 'templateId', 'title', 'version', 'status')} for p in result[:20]]
                 if isinstance(result, dict) and 'projectId' in result and 'fields' in result:
                     project_id = result['projectId']
+                    if name == 'create_document_project':
+                        created_projects.add(project_id)
+                    if name == 'update_document_fields' and before:
+                        changed_fields.setdefault(project_id, set()).update(key for key, value in result['fields'].items() if before.fields.get(key) != value)
                     self.store.update_context(owner, cid, project_id=project_id)
                     if name in ('get_document_project', 'create_document_project', 'update_document_fields'):
                         read_versions[project_id] = result['version']
@@ -166,9 +164,11 @@ class AgentRunner:
                     citation = result['citation']
                     verified[(citation['documentId'], citation['versionId'], citation['sectionId'], citation['excerpt'])] = citation
                 if name == 'validate_document_project' and 'validation' in result:
+                    validated_projects.add(result['projectId'])
                     validation = result['validation']
+                    field_labels = {f.key: f.label for f in self.documents.template(result['templateId']).fields}
                     blocks.append(dict(type='validation_result', outcome='pass' if validation['ready'] else 'blocked',
-                                       checks=[{'label': i.get('field') or i['code'], 'detail': i['message']} for i in validation['issues']] or
+                                       checks=[{'label': field_labels.get(i.get('field'), 'Документ'), 'detail': i['message']} for i in validation['issues']] or
                                               [{'label': 'Реквизиты', 'detail': 'Формальные проверки пройдены. Требуется отдельное согласование и подписание.'}]))
                 if name == 'get_knowledge_section':
                     result['text'] = result['text'][:12000]
@@ -182,7 +182,7 @@ class AgentRunner:
                 # Known public service codes only, no input values or raw upstream errors.
                 result = {'error': code if isinstance(code, str) and re.fullmatch(r'[a-z_]+', code) else 'tool_failed'}
             self.store.tool_finish(owner, rid, fingerprint, result)
-            steps.append({'label': TOOL_LABELS.get(name, name) + (' · требуется действие' if 'error' in result else ''), 'state': 'done'})
+            steps.append({'label': TOOL_LABELS.get(name, 'Обработка запроса') + (' · требуется действие' if 'error' in result else ''), 'state': 'done'})
             return result
 
         try:
@@ -299,12 +299,19 @@ class AgentRunner:
                                 sources[result.citation.id] = result.citation.model_dump(mode='json')
                     if (final_answer.answerType == 'normative' or knowledge_used or request.scenario in ('requirement', 'approval')) and not sources:
                         text = 'Нет подтверждённого источника для нормативного вывода. Уточните вопрос или найдите применимый пункт в базе знаний.'
-                    if final_answer.suggestedTemplateIds:
-                        ids = set(final_answer.suggestedTemplateIds) & known_templates
-                        if ids:
-                            blocks.append(suggestions(self.documents, ids))
-                    if final_answer.clarification:
-                        blocks.append(dict(type='clarification', question=final_answer.clarification, fields=[]))
+                    choosing_template = False
+                    ids = set(final_answer.suggestedTemplateIds) & known_templates
+                    if not ids and not project_id and final_answer.answerType == 'document':
+                        ids = known_templates
+                    if ids:
+                        blocks.append(suggestions(self.documents, ids))
+                        choosing_template = True
+                        if final_answer.answerType == 'document' and not sources:
+                            text = TEMPLATE_CHOICE_TEXT
+                    if final_answer.clarification and not choosing_template:
+                        question = public_text(final_answer.clarification, self.documents.list_templates())
+                        if question:
+                            blocks.append(dict(type='clarification', question=question, fields=[]))
         except (ProviderError, HTTPException, KnowledgeError) as exc:
             code = str(exc) if isinstance(exc, ProviderError) else exc.detail if isinstance(exc, HTTPException) else exc.code
             message = {'provider_timeout': 'AI-движок не ответил вовремя.', 'provider_auth_failed': 'Не удалось подключить AI-движок: проверьте серверную настройку ключа.',
@@ -324,6 +331,11 @@ class AgentRunner:
         if project_id:
             project = self.documents.get(owner, project_id)
             if project:
+                template = self.documents.template(project.templateId)
+                if (final_answer and final_answer.answerType == 'document' and not sources and not message
+                        and not any(b.get('type') == 'template_suggestions' for b in blocks)
+                        and (project_id in created_projects or project_id in changed_fields or project_id in validated_projects)):
+                    text = document_summary(project, template, created=project_id in created_projects, changed=changed_fields.get(project_id, ()))
                 blocks.append(form_block(self.documents, project))
                 if project.status == 'generated':
                     for artifact in project.artifacts:
@@ -334,7 +346,9 @@ class AgentRunner:
                 project_id = None
         blocks.extend(dict(type='citation', sourceId=c['id']) for c in sources.values())
         if steps:
-            blocks.append(dict(type='task_progress', title='Выполненные операции', steps=steps))
+            blocks.append(dict(type='task_progress', title='Действия помощника', steps=steps))
+        field_specs = self.documents.template(project.templateId).fields if project_id and project else ()
+        text = public_text(text, self.documents.list_templates(), field_specs) or 'Уточните, какой документ нужно подготовить.'
         result = ChatResult(status=status, conversationId=cid, requestId=rid, text=text,
                             message=message, blocks=blocks, sources=list(sources.values()), documentProjectId=project_id,
                             workspace={'open': True, 'tab': 'sources', 'selectedSourceId': next(iter(sources))} if sources else None,

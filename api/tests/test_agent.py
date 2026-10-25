@@ -18,7 +18,7 @@ from api.agent.models import ChatRequest
 from api.agent.providers import Completion, DeepSeekProvider, LocalQwenProvider, ModelMessage, ProviderError
 from api.agent.runner import AgentRunner
 from api.agent.store import ChatStore
-from api.knowledge.models import Principal, UploadMetadata
+from api.knowledge.models import ListArgs, Principal, UploadMetadata
 from api.knowledge.seed import import_case_sources
 from api.knowledge.service import KnowledgeService
 from api.service import DocumentsService, SOURCE_DIR
@@ -351,3 +351,72 @@ def test_wrong_citation_edition_cannot_support_normative_answer(setup):
     result = runner(setup, provider).run(request(), setup[2])
     assert not result.sources and 'Выдуманное' not in result.text
     assert any(m['role']=='tool' and json.loads(m['content']).get('verified') is False for m in provider.calls[-1])
+
+
+@pytest.mark.parametrize('with_ids', [True, False])
+def test_template_choice_is_concise_russian_and_does_not_repeat_model_catalogue(setup, with_ids):
+    ids = [t.templateId for t in setup[0].list_templates()] if with_ids else []
+    provider = MockProvider(calls(('list_templates', {})), final(
+        'Помогу создать документ. working-group-order — Распоряжение о создании рабочей группы.\n'
+        '### svgВыберите модуль DOCX\n<svg><title>Icon code</title></svg>\n```jsx\n<Form />\n```',
+        suggestedTemplateIds=ids, clarification='Укажите название или templateId документа.'))
+    result = runner(setup, provider).run(request(), setup[2])
+    assert result.text == 'Выберите документ из списка ниже. После выбора откроется форма для заполнения.'
+    catalog = [b for b in result.blocks if b.type == 'template_suggestions']
+    assert len(catalog) == 1 and len(catalog[0].templates) == 7
+    assert not any(b.type == 'clarification' for b in result.blocks)
+    assert 'templateId' not in result.text and 'working-group-order' not in result.text
+
+
+def test_document_summary_reports_confirmed_state_instead_of_model_success_claim(setup):
+    provider = MockProvider(calls(('list_templates', {})),
+                            calls(('create_document_project', {'templateId': 'system-commissioning-order'})),
+                            final('Все поля заполнены, документ утверждён. Можно сформировать DOCX.'))
+    result = runner(setup, provider).run(request(), setup[2])
+    assert 'Создан черновик' in result.text and 'Заполнено 0 из 17' in result.text
+    assert 'Можно сформировать' not in result.text and 'утверждён' not in result.text
+    assert any(b.type == 'document_form' for b in result.blocks)
+
+
+def test_update_summary_and_validation_use_real_russian_field_labels(setup):
+    documents, _, user, _ = setup
+    p = documents.create(user['deviceId'], 'working-group-order', '')
+    provider = MockProvider(calls(('get_document_project', {'projectId': p.projectId})),
+                            calls(('update_document_fields', {'projectId': p.projectId, 'expectedVersion': 1, 'fields': {'secretary': 'Петрова Анна Сергеевна'}})),
+                            calls(('validate_document_project', {'projectId': p.projectId})),
+                            final('updated secretary; use validate_document_project'))
+    result = runner(setup, provider).run(request(context={'documentProjectId':p.projectId}), user)
+    label = next(f.label for f in documents.template(p.templateId).fields if f.key == 'secretary')
+    assert label in result.text and 'Изменения сохранены' in result.text
+    assert 'secretary' not in result.text and 'validate_document_project' not in result.text
+    validation = next(b for b in result.blocks if b.type == 'validation_result')
+    assert all(any('а' <= c.lower() <= 'я' for c in check['label']) for check in validation.checks)
+
+
+def test_model_markup_is_removed_without_changing_document_fields(setup):
+    documents, _, user, _ = setup
+    project = documents.create(user['deviceId'], 'working-group-order', '')
+    original = '<svg>Исходное значение реквизита</svg>'
+    documents.patch(user['deviceId'], project.projectId, 1, {'subject':original}, None)
+    provider = MockProvider(final('### svgПодготовка документа\n<svg><title>SVG-CODE</title><path/></svg>\n'
+                                  '<p>Выберите <b>working-group-order</b>.</p>\n'
+                                  '```jsx\nconst form = <Form />;\n```\nУкажите `templateId`.', 'general'))
+    result = runner(setup, provider).run(request(context={'documentProjectId':project.projectId}), user)
+    assert 'Распоряжение о создании рабочей группы' in result.text
+    assert 'название документа' in result.text
+    assert all(marker not in result.text for marker in ('<', '>', 'svg', 'SVG-CODE', 'const form', 'templateId', 'working-group-order'))
+    assert documents.get(user['deviceId'], project.projectId).fields['subject'] == original
+    assert next(b for b in result.blocks if b.type == 'document_form').values['subject'] == original
+
+
+def test_document_and_knowledge_operations_never_use_raw_english_names(setup):
+    documents, knowledge, user, _ = setup
+    doc = knowledge.list_knowledge_documents(Principal(id=user['deviceId']), ListArgs()).items[0]
+    p = documents.create(user['deviceId'], 'working-group-order', '')
+    provider = MockProvider(calls(('list_document_projects', {}), ('list_document_versions', {'projectId':p.projectId}),
+                                 ('list_knowledge_documents', {}), ('get_knowledge_document', {'documentId':doc.id}), ('list_knowledge_versions', {'documentId':doc.id})),
+                            final('Источники получены.', 'general'))
+    result = runner(setup, provider).run(request(), user)
+    progress = next(b for b in result.blocks if b.type == 'task_progress')
+    assert len(progress.steps) == 5
+    assert all('_' not in s.label and any('а' <= c.lower() <= 'я' for c in s.label) for s in progress.steps)
