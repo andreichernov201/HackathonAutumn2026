@@ -15,7 +15,7 @@ from .config import session_secret
 from .limits import RequestSizeLimitMiddleware
 from .session import SESSION_MAX_AGE, write_session_cookie
 
-from .models import ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
+from .models import GenerateProject, GenerateArg, ArtifactArg, CreateProject, DocumentProject, PatchFields, PreviewFields, ProjectIdArg, Template, TemplateIdArg, ToolCall, UpdateFieldsArg
 from .service import DocumentsService, TEMPLATE_ID
 from .preview_service import DOCX_MIME
 from .editor import EditorOperation, EditorService
@@ -88,7 +88,12 @@ def error(exc: ValueError):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'model': 'not_configured'}
+    from .agent.config import AISettings
+    try:
+        config = AISettings.from_env()
+        return {'status': 'ok', 'model': config.model if config.configured else 'not_configured', 'provider': config.provider}
+    except ValueError:
+        return {'status': 'ok', 'model': 'configuration_error'}
 
 
 @app.get('/api/ready')
@@ -201,10 +206,10 @@ def preview_project_file(project_id: str, body: PreviewFields, user=Depends(muta
     })
 
 @app.post('/api/document-projects/{project_id}/generate', response_model=DocumentProject)
-def generate_project(project_id: str, user=Depends(mutation)):
+def generate_project(project_id: str, body: GenerateProject | None = None, user=Depends(mutation)):
     project_or_404(user, project_id)
     try:
-        return service.generate(user['deviceId'], project_id)
+        return service.generate(user['deviceId'], project_id, body.expectedVersion if body else None)
     except ValueError as exc:
         error(exc)
 
@@ -253,7 +258,7 @@ TOOL_MODELS = {
     'list_document_projects': (None, list[DocumentProject]),
     'update_document_fields': (UpdateFieldsArg, DocumentProject),
     'validate_document_project': (ProjectIdArg, DocumentProject),
-    'generate_document_docx': (ProjectIdArg, DocumentProject),
+    'generate_document_docx': (GenerateArg, DocumentProject),
     'list_document_versions': (ProjectIdArg, list),
     'get_document_artifact': (ArtifactArg, dict),
 }
@@ -288,7 +293,7 @@ def invoke_tool(tool_name: str, call: ToolCall, user=Depends(mutation)):
         if tool_name == 'get_document_project': return project
         if tool_name == 'update_document_fields': return service.patch(owner, args['projectId'], args['expectedVersion'], args['fields'], args['title'])
         if tool_name == 'validate_document_project': return project
-        if tool_name == 'generate_document_docx': return service.generate(owner, args['projectId'])
+        if tool_name == 'generate_document_docx': return service.generate(owner, args['projectId'], args.get('expectedVersion'))
         if tool_name == 'list_document_versions': return project.artifacts
         if tool_name == 'get_document_artifact':
             found = service.artifact(owner, args['projectId'], args['artifactId'])
@@ -338,3 +343,7 @@ def editor_operation(project_id: str, body: EditorOperation, user=Depends(mutati
         return EditorService(service, knowledge_service).apply(user['deviceId'], body)
     except ValueError as exc:
         error(exc)
+
+# Inference uses exactly the same services, signed session and tool allowlist.
+from .agent.router import build_chat_router
+app.include_router(build_chat_router(lambda: service, lambda: knowledge_service, lambda: tool_registry, actor, mutation))

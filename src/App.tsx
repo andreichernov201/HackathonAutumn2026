@@ -12,8 +12,8 @@ import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import type { KnowledgeCitation } from './features/knowledge/types'
 import type { DocumentProject } from './features/documents/types'
 import { documentsApi } from './features/documents/api'
-import { isOrderCreationCommand, recommendedOrderTemplateId } from './features/assistant/orderTemplates'
-import { assistantGateway } from './features/assistant/gateway'
+import { flushChatProjects, refreshChatProject } from './features/documents/chatProjectStore'
+import { aiConfiguration, type AIConfiguration, assistantGateway } from './features/assistant/gateway'
 import { scenarios } from './features/assistant/scenarios'
 import { sessionStore } from './features/assistant/sessionStore'
 import type { ChatMessage, ChatSession, FileReference, Scenario, WorkspaceTab } from './features/assistant/types'
@@ -30,6 +30,11 @@ export default function App() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
+  const [progress, setProgress] = useState('')
+  const [aiConfig, setAiConfig] = useState<AIConfiguration>()
+  const [syntheticAcknowledged, setSyntheticAcknowledged] = useState(() => {try {return sessionStorage.getItem('regula-synthetic-only') === '1'} catch {return false}})
+  const retryRequest = useRef<Parameters<typeof assistantGateway.submit>[0] | undefined>(undefined)
+  const submittingRef = useRef(false)
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>()
   const [selectedDocument, setSelectedDocument] = useState<DocumentProject | undefined>()
   const [documentOpenVersion, setDocumentOpenVersion] = useState(0)
@@ -38,6 +43,7 @@ export default function App() {
   const workspace = activeSession?.workspace ?? closedWorkspace
 
   useEffect(() => sessionStore.save(sessions), [sessions])
+  useEffect(() => { void aiConfiguration().then(setAiConfig).catch(() => {}) }, [])
   useEffect(() => {
     const onHash = () => setSection(location.hash.startsWith('#knowledge') ? 'knowledge' : 'assistant')
     if (location.hash.startsWith('#knowledge')) onHash()
@@ -95,7 +101,10 @@ export default function App() {
 
   async function submit() {
     const text = draft.trim()
-    if ((!text && !file) || submitting) return
+    if ((!text && !file) || submittingRef.current) return
+    if (aiConfig?.configured && aiConfig.processing === 'cloud' && !syntheticAcknowledged) {setRequestError('Подтвердите использование только синтетических материалов под полем ввода.'); return}
+    submittingRef.current = true
+    try { await flushChatProjects() } catch {submittingRef.current = false; setRequestError('Сохраните изменения в форме и разрешите конфликт версии перед запросом к AI.'); return}
     const now = new Date().toISOString()
     const id = activeSessionId ?? crypto.randomUUID()
     const existing = sessions.find((item) => item.id === id)
@@ -135,27 +144,14 @@ export default function App() {
     setScenario(undefined)
     setRequestError('')
     setSubmitting(true)
+    submittingRef.current = true
+    setProgress('Запрос отправлен серверу…')
 
     try {
-      if (scenario === 'document' || isOrderCreationCommand(text)) {
-        const templates = await documentsApi.templates()
-        const recommendedTemplateId = recommendedOrderTemplateId(text, templates)
-        const reply: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          text: recommendedTemplateId ? 'Нашёл подходящий модуль среди семи доступных DOCX-шаблонов. Создайте проект — он сразу откроется в редакторе.' : 'Выберите модуль из семи доступных DOCX-шаблонов. После создания проект сразу откроется в редакторе.',
-          blocks: [{type: 'template_suggestions', recommendedTemplateId, templates: templates.map(({templateId, title, kind, note, sourceStatus}) => ({templateId, title, kind, note, sourceStatus}))}],
-          createdAt: new Date().toISOString(),
-          origin: 'api',
-        }
-        updateSession(id, (session) => ({
-          ...session,
-          messages: [...session.messages, reply],
-        }))
-        return
-      }
-      const result = await assistantGateway.submit({
+      const request = {
         conversationId: id,
+        requestId: message.id,
+        syntheticOnlyAcknowledged: syntheticAcknowledged,
         message: text,
         scenario,
         history: existing?.messages ?? [],
@@ -165,11 +161,15 @@ export default function App() {
           file: fileReference,
           knowledgeSource: existing?.knowledgeSource,
         },
-      })
+      }
+      retryRequest.current = request
+      const result = await assistantGateway.submit(request, setProgress)
+      retryRequest.current = undefined
       if (result.status !== 'completed') {
         setRequestError(result.message)
         return
       }
+      if (result.documentProjectId) await refreshChatProject(result.documentProjectId)
       const reply: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -187,36 +187,54 @@ export default function App() {
           ...result.sources,
         ],
         workspace: result.workspace ?? session.workspace,
+        documentProjectId: result.documentProjectId ?? session.documentProjectId,
       }))
     } catch {
       setRequestError('Не удалось получить ответ. Проверьте соединение с сервером или попробуйте снова.')
     } finally {
       setSubmitting(false)
+      submittingRef.current = false
+      setProgress('')
     }
   }
 
-  async function createDocumentFromChat(templateId: string) {
-    const template = templateId === 'working-group-order' ? (await documentsApi.templates()).find(item => item.templateId === templateId) : undefined
-    const project = await documentsApi.create(templateId)
-    const id = activeSessionId
-    if (id) {
-      const time = new Date().toISOString()
-      const reply: ChatMessage = template ? {
-        id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
-        text: `Создан проект «${project.title}». Заполните его по шагам; после подтверждения откроется тот же проект в редакторе.`,
-        blocks: [{type: 'working_group_wizard', projectId: project.projectId, projectTitle: project.title, projectVersion: project.version, fields: project.fields, fieldSpecs: template.fields}],
-      } : {
-        id: crypto.randomUUID(), role: 'assistant', createdAt: time, origin: 'api',
-        text: `Создан проект «${project.title}». Он открыт в редакторе; связь с этим чатом сохранена.`,
-      }
-      updateSession(id, session => ({...session, documentProjectId: project.projectId, updatedAt: time, messages: [...session.messages, reply], workspace: {open: !template, tab: 'document'}}))
-    }
+  async function chatAction(action: {selectTemplateId?: string; confirmActionId?: string; requestId?: string}) {
+    if (!activeSessionId || submittingRef.current) return
+    submittingRef.current = true
+    try { await flushChatProjects() } catch (error) {submittingRef.current = false; throw error}
+    const request = {conversationId: activeSessionId, requestId: crypto.randomUUID(), message: '', history: [], syntheticOnlyAcknowledged: syntheticAcknowledged, context: {documentProjectId: activeSession?.documentProjectId, workspace: activeSession?.workspace ?? closedWorkspace}, ...action}
+    submittingRef.current = true; setSubmitting(true); setProgress('Выполняю выбранное действие…')
+    try {
+      retryRequest.current = request
+      const result = await assistantGateway.submit(request, setProgress)
+      retryRequest.current = undefined
+      if (result.status !== 'completed') throw new Error(result.message)
+      const reply: ChatMessage = {id: crypto.randomUUID(), role: 'assistant', text: result.text, blocks: result.blocks, origin: 'api', createdAt: new Date().toISOString()}
+      updateSession(activeSessionId, session => ({...session, documentProjectId: result.documentProjectId ?? session.documentProjectId, updatedAt: reply.createdAt, messages: [...session.messages, reply]}))
+      if (result.documentProjectId) await refreshChatProject(result.documentProjectId)
+    } finally { submittingRef.current = false; setSubmitting(false); setProgress('') }
+  }
+
+  function openFullEditor(project: DocumentProject) {
     setSelectedDocumentId(project.projectId)
-    if (templateId !== 'working-group-order') {
-      setSelectedDocument(undefined)
-      setDocumentOpenVersion(value => value + 1)
-      setSection('documents')
-    }
+    setSelectedDocument(project)
+    setDocumentOpenVersion(value => value + 1)
+    setSection('documents')
+  }
+
+  async function retryChatRequest() {
+    const request = retryRequest.current
+    if (!request || submittingRef.current) return
+    submittingRef.current = true; setSubmitting(true)
+    try {
+      const result = await assistantGateway.submit(request, setProgress)
+      if (result.status !== 'completed') throw new Error(result.message)
+      const reply: ChatMessage = {id: crypto.randomUUID(), role: 'assistant', text: result.text, blocks: result.blocks, origin: 'api', createdAt: new Date().toISOString()}
+      updateSession(request.conversationId, session => ({...session, messages: [...session.messages, reply], sources: [...(session.sources ?? []).filter(s => !result.sources.some(x => x.id === s.id)), ...result.sources], documentProjectId: result.documentProjectId ?? session.documentProjectId, workspace: result.workspace ?? session.workspace}))
+      retryRequest.current = undefined; setRequestError('')
+      if (result.documentProjectId) await refreshChatProject(result.documentProjectId)
+    } catch {setRequestError('Не удалось получить результат. Проверьте проект: повторный запрос с тем же ID не выполняет операции заново.')}
+    finally {submittingRef.current = false; setSubmitting(false); setProgress('')}
   }
 
   async function completeWorkingGroup(projectId: string, expectedVersion: number, fields: Record<string, string>) {
@@ -247,7 +265,8 @@ export default function App() {
     const message: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
-      text: `Открыт проект «${project.title}» (версия ${project.version}). Редактирование, проверка и DOCX доступны в разделе «Документы».`,
+      text: `Открыт проект «${project.title}» (версия ${project.version}). Реквизиты можно менять в форме или через помощника.`,
+      blocks: [{type: 'document_form', projectId: project.projectId}],
       createdAt: time,
       origin: 'api',
     }
@@ -373,7 +392,10 @@ export default function App() {
                 setDocumentOpenVersion((value) => value + 1)
                 setSection('documents')
               }}
-              onCreateDocument={createDocumentFromChat}
+              onCreateDocument={(templateId, requestId) => chatAction({selectTemplateId: templateId, requestId})}
+              onConfirmAction={confirmActionId => chatAction({confirmActionId})}
+              onOpenEditor={openFullEditor}
+              disabled={submitting}
               onCompleteWorkingGroup={completeWorkingGroup}
             />
           ) : (
@@ -415,10 +437,15 @@ export default function App() {
         {requestError && (
           <p className="request-error" role="alert">
             {requestError}
+            {retryRequest.current && <button type="button" disabled={submitting} onClick={() => void retryChatRequest()}>Получить результат повторно</button>}
           </p>
         )}
+        {section === 'assistant' && submitting && <p className="chat-request-progress" role="status">{progress}</p>}
         {section === 'assistant' && (
           <Composer
+            aiConfig={aiConfig}
+            syntheticAcknowledged={syntheticAcknowledged}
+            onSyntheticAcknowledged={value => {setSyntheticAcknowledged(value); try {sessionStorage.setItem('regula-synthetic-only', value ? '1' : '0')} catch { /* Consent remains in memory. */ }}}
             inputRef={inputRef}
             draft={draft}
             file={file}

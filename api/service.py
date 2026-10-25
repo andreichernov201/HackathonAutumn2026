@@ -260,9 +260,10 @@ class DocumentsService:
             db.execute("UPDATE templates SET status='ready' WHERE id=?", (TEMPLATE_ID,))
         return self.template(TEMPLATE_ID)
 
-    def generate(self, owner: str, project_id: str):
+    def generate(self, owner: str, project_id: str, expected: int | None = None):
         project = self.get(owner, project_id)
         if not project: return None
+        if expected is not None and project.version != expected: raise ValueError('version_conflict')
         if not project.validation.ready: raise ValueError('validation_failed')
         if project.status == 'generated' and any(item.projectVersion == project.version for item in project.artifacts):
             return project
@@ -278,9 +279,16 @@ class DocumentsService:
         filename = f'proekt-{project.templateId}-v{project.version}.docx'
         try:
             with self.db() as db:
-                result = db.execute("UPDATE projects SET status='generated' WHERE id=? AND owner=? AND version=?", (project_id, owner, project.version))
-                if result.rowcount != 1: raise ValueError('version_conflict')
-                db.execute('INSERT INTO artifacts VALUES (?,?,?,?,?,?,?)', (artifact_id, project_id, owner, project.version, now(), filename, digest))
+                db.execute('BEGIN IMMEDIATE')
+                latest = db.execute('SELECT version FROM projects WHERE id=? AND owner=?', (project_id, owner)).fetchone()
+                if not latest or latest['version'] != project.version: raise ValueError('version_conflict')
+                existing = db.execute('SELECT id FROM artifacts WHERE project_id=? AND owner=? AND project_version=?', (project_id, owner, project.version)).fetchone()
+                if existing:
+                    path.unlink(missing_ok=True)
+                else:
+                    result = db.execute("UPDATE projects SET status='generated' WHERE id=? AND owner=? AND version=?", (project_id, owner, project.version))
+                    if result.rowcount != 1: raise ValueError('version_conflict')
+                    db.execute('INSERT INTO artifacts VALUES (?,?,?,?,?,?,?)', (artifact_id, project_id, owner, project.version, now(), filename, digest))
         except Exception:
             path.unlink(missing_ok=True)
             raise

@@ -89,3 +89,9 @@ class ArtifactArg(StrictInput):
     projectId: str
     artifactId: str
 
+
+class GenerateProject(StrictInput):
+    expectedVersion: int | None = Field(default=None, ge=1)
+
+class GenerateArg(ProjectIdArg):
+    expectedVersion: int | None = Field(default=None, ge=1)

@@ -17,6 +17,13 @@ class ToolRegistry:
     def definitions(self):
         return [definition for definition, _ in self._tools.values()]
 
+    def model_definitions(self):
+        """OpenAI-compatible function schemas from the single service allowlist."""
+        return [{"type": "function", "function": {"name": d["name"],
+                 "description": d.get("description", d["name"]),
+                 "parameters": d.get("inputSchema", {"type": "object", "properties": {}, "additionalProperties": False})}}
+                for d in self.definitions()]
+
     def invoke(self, name, arguments, user):
         if name not in self._tools:
             raise HTTPException(404, 'tool_not_found')

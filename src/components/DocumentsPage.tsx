@@ -64,7 +64,7 @@ export function DocumentsPage({ initialProjectId, initialProject, openVersion, o
           if (active) open(initialProject)
         } else if (initialProjectId) {
           const next = await documentsApi.get(initialProjectId)
-          if (active && current.current?.projectId !== next.projectId) open(next)
+          if (active && (current.current?.projectId !== next.projectId || (!dirty && current.current?.version !== next.version))) open(next)
         }
       })
       .catch(showError)

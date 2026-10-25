@@ -5,6 +5,7 @@ export const documentsApi = {
   async session(): Promise<Session> {
     return session()
   },
+  template: (id: string) => request<DocumentTemplate>(`/api/document-templates/${encodeURIComponent(id)}`),
   templates: () => request<DocumentTemplate[]>('/api/document-templates'),
   projects: () => request<DocumentProject[]>('/api/document-projects'),
   get: (id: string) => request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}`),
@@ -37,8 +38,8 @@ export const documentsApi = {
   },
   validate: (id: string) =>
     request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/validate`, { method: 'POST' }),
-  generate: (id: string) =>
-    request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/generate`, { method: 'POST' }),
+  generate: (id: string, expectedVersion?: number) =>
+    request<DocumentProject>(`/api/document-projects/${encodeURIComponent(id)}/generate`, { method: 'POST', body: JSON.stringify({expectedVersion}) }),
   artifactUrl: (id: string, artifactId: string) =>
     `/api/document-projects/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}/download`,
   download: async (id: string, artifactId: string, filename: string) => {
