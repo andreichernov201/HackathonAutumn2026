@@ -17,7 +17,7 @@ export const sessionStore = {
   },
   save(sessions: ChatSession[]) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.map(session => ({...session, messages: session.messages.map(message => ({...message, blocks: message.blocks?.map(block => block.type === 'document_form' ? {type: block.type, projectId: block.projectId} : block)}))}))))
     } catch {
       // Без доступа к хранилищу диалоги всё равно работают до обновления страницы.
     }

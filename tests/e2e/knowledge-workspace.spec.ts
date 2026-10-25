@@ -107,7 +107,7 @@ test('TOC selection, point/document AI context, persistent links and stale searc
   await page.getByRole('button', { name: 'Спросить ИИ об этом пункте', exact: true }).click()
   await expect(page.getByLabel('Ваш запрос')).toHaveValue(/Объясни этот пункт/)
   await page.getByRole('button', { name: 'Отправить запрос' }).click()
-  await expect(page.getByRole('alert')).toContainText('Автоматическое объяснение недоступно')
+  await expect(page.locator('.message-row.assistant').last()).toContainText('Автоматическое объяснение недоступно')
   await page.goto(pointUrl)
   await expect(page.locator('.kb-source-text')).toContainText('до его подписания')
   await page.locator('.kw-action-menu summary').click()

@@ -88,9 +88,57 @@ jobs:
         if: always()
         run: docker compose down --volumes --remove-orphans
 
+  agent-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+      - run: pip install -r api/requirements.txt
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run synthetic browser acceptance with deterministic provider
+        env:
+          REGULA_AGENT_BROWSER_TEST: '1'
+          AI_PROVIDER: local_qwen
+          QWEN_MODEL: scripted-test
+          REGULA_DATA_DIR: /tmp/regula-agent-browser
+        run: |
+          uvicorn api.tests.agent_browser_app:app --host 127.0.0.1 --port 8000 > /tmp/agent-api.log 2>&1 &
+          api_pid=$!
+          npm run dev > /tmp/agent-web.log 2>&1 &
+          web_pid=$!
+          trap 'kill "$api_pid" "$web_pid" 2>/dev/null || true' EXIT
+          python - <<'PYCODE'
+          import time, urllib.request
+          for endpoint in ('http://127.0.0.1:8000/api/ready', 'http://127.0.0.1:5173'):
+              for attempt in range(60):
+                  try:
+                      urllib.request.urlopen(endpoint, timeout=1)
+                      break
+                  except Exception:
+                      time.sleep(1)
+              else:
+                  raise SystemExit('test service did not start')
+          PYCODE
+          npx playwright test -c playwright.agent.config.ts
+      - name: Browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-browser-traces
+          path: test-results/agent
+
   publish-api:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: [build, api, docker]
+    needs: [build, api, docker, agent-browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -116,7 +164,7 @@ jobs:
 
   publish-web:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: [build, api, docker]
+    needs: [build, api, docker, agent-browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { CircleHelp, FileText, Sparkles } from 'lucide-react'
 import { scenarios } from '../features/assistant/scenarios'
+import type { DocumentProject } from '../features/documents/types'
 import type { ChatSession } from '../features/assistant/types'
 import { formatFileSize, formatTime } from '../shared/format'
 import { MessageMarkdown } from './MessageMarkdown'
@@ -10,10 +11,13 @@ interface Props {
   session: ChatSession
   onSource: (id: string) => void
   onStartDocument: () => void
-  onCreateDocument: (templateId: string) => Promise<void>
+  onCreateDocument: (templateId: string, requestId: string) => Promise<void>
+  onConfirmAction: (id: string) => Promise<void>
+  onOpenEditor: (project: DocumentProject) => void
+  disabled?: boolean
   onCompleteWorkingGroup: (projectId: string, expectedVersion: number, fields: Record<string, string>) => Promise<void>
 }
-export function ConversationView({ session, onSource, onStartDocument, onCreateDocument, onCompleteWorkingGroup }: Props) {
+export function ConversationView({ session, onSource, onStartDocument, onCreateDocument, onCompleteWorkingGroup, onConfirmAction, onOpenEditor, disabled }: Props) {
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,11 +54,14 @@ export function ConversationView({ session, onSource, onStartDocument, onCreateD
                 )}
                 {message.blocks && (
                   <ChatBlocks
-                    blocks={message.blocks}
+                    blocks={message.blocks.filter(block => block.type !== 'document_form' || !session.messages.slice(session.messages.indexOf(message) + 1).some(m => m.blocks?.some(b => b.type === 'document_form' && b.projectId === block.projectId)))}
                     sources={session.sources ?? []}
                     onSource={onSource}
                     onStartDocument={onStartDocument}
-                    onCreateDocument={onCreateDocument}
+                    onCreateDocument={templateId => onCreateDocument(templateId, message.id)}
+                    onConfirmAction={onConfirmAction}
+                    onOpenEditor={onOpenEditor}
+                    disabled={disabled}
                     onCompleteWorkingGroup={onCompleteWorkingGroup}
                   />
                 )}

@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test'
 
 const question = 'Когда присваивается регистрационный номер проекту распоряжения?'
 
-test('real search, source panel, knowledge deep link and honest Qwen status', async ({ page }) => {
+test('real search, source panel, knowledge deep link and honest AI configuration status', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Рабочее пространство', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Чаты', exact: true }).click()
   await page.getByRole('textbox', { name: 'Ваш запрос' }).fill(question)
   await page.getByRole('button', { name: 'Отправить запрос' }).click()
   await expect(page.locator('.citation-card').first()).toContainText('2.1')
-  await expect(page.locator('.message-row.assistant')).toContainText('Результат поиска по тексту документов')
+  await expect(page.locator('.message-row.assistant')).toContainText('проверенные выдержки из локальной базы')
   await page.locator('.citation-card').first().click()
   const panel = page.getByRole('complementary', { name: 'Рабочая панель' })
   await expect(panel.getByRole('link', { name: 'Открыть оригинал' }).first()).toHaveAttribute(
@@ -23,7 +23,7 @@ test('real search, source panel, knowledge deep link and honest Qwen status', as
   await expect(page).toHaveURL(/#knowledge\/sections\//)
   await page.getByRole('button', { name: 'Спросить ИИ об этом пункте' }).click()
   await page.getByRole('button', { name: 'Отправить запрос' }).click()
-  await expect(page.getByRole('alert')).toContainText('Автоматическое объяснение недоступно')
+  await expect(page.locator('.message-row.assistant').last()).toContainText('Автоматическое объяснение недоступно')
   await page.reload()
   await expect(page.locator('.history-item')).toHaveCount(2)
   await page.locator('.history-item').last().click()
@@ -69,7 +69,7 @@ test('document edits survive navigation and a delayed validation; chat opens sam
   await expect(page.locator('.docs-editor-head')).toContainText('Сохранено')
   await page.getByRole('button', { name: 'Открыть в чате', exact: true }).click()
   await expect(page.locator('.message-row.assistant')).toContainText('Открыт проект')
-  await page.getByRole('button', { name: /^Открыть проект / }).click()
+  await page.getByRole('button', { name: 'Открыть полный редактор', exact: true }).click()
   await expect(title).toHaveValue('Правка во время проверки')
   expect((await page.context().cookies()).find((cookie) => cookie.name === 'regula_session')?.value).toBe(
     originalCookie,
@@ -86,56 +86,44 @@ test('unconnected file checking never answers from a second normative corpus', a
   })
   await page.getByRole('textbox', { name: 'Ваш запрос' }).fill(question)
   await page.getByRole('button', { name: 'Отправить запрос' }).click()
-  await expect(page.getByRole('alert')).toContainText('Файл не был проанализирован')
+  await expect(page.locator('.message-row.assistant')).toContainText('Файл не был проанализирован')
   await expect(page.locator('.citation-card')).toHaveCount(0)
 })
 
-test('order command recommends a real DOCX module and opens the created project', async ({ page }) => {
+test('catalog selection creates a universal form without leaving chat', async ({page}) => {
   await page.goto('/')
-  await page.getByRole('button', {name: 'Чаты', exact: true}).click()
-  await page.getByRole('textbox', {name: 'Ваш запрос'}).fill('Создай приказ о назначении ответственных за делопроизводство')
-  await page.getByRole('button', {name: 'Отправить запрос'}).click()
-  const modules = page.getByRole('region', {name: 'Модули DOCX'})
+  await page.getByRole('button', {name:'Чаты', exact:true}).click()
+  await page.getByRole('textbox', {name:'Ваш запрос'}).fill('Создай приказ о назначении ответственных за делопроизводство')
+  await page.getByRole('button', {name:'Отправить запрос'}).click()
+  const modules = page.getByRole('region', {name:'Модули DOCX'})
   await expect(modules.locator('.template-suggestion')).toHaveCount(7)
-  const recommended = modules.locator('.template-suggestion.recommended')
-  await expect(recommended).toContainText('Приказ о назначении ответственных за делопроизводство')
-  await recommended.getByRole('button', {name: 'Создать и открыть'}).click()
-  await expect(page.locator('.docs-editor-head')).toBeVisible()
-  await expect(page.getByRole('textbox', {name: 'Название проекта'})).toHaveValue(/Приказ о назначении ответственных за делопроизводство/)
-  await page.getByRole('button', {name: 'Открыть в чате', exact: true}).click()
-  await expect(page.getByText(/связь с этим чатом сохранена/)).toBeVisible()
+  await modules.locator('.template-suggestion').filter({hasText:'Приказ о назначении ответственных за делопроизводство'}).getByRole('button', {name:'Создать в чате'}).click()
+  const form = page.getByRole('region', {name:/Форма:/})
+  await expect(form).toBeVisible()
+  await form.getByRole('button', {name:'Открыть полный редактор'}).click()
+  await expect(page.getByRole('textbox', {name:'Название проекта'})).toHaveValue(/Приказ о назначении ответственных за делопроизводство/)
 })
 
-test('working group wizard fills the existing project from the current field schema', async ({ page }) => {
+test('working group uses the same universal form and server schema', async ({page}) => {
   await page.goto('/')
-  await page.getByRole('button', {name: 'Чаты', exact: true}).click()
-  await page.getByRole('textbox', {name: 'Ваш запрос'}).fill('Создай распоряжение о рабочей группе')
-  await page.getByRole('button', {name: 'Отправить запрос'}).click()
-  const recommended = page.getByRole('region', {name: 'Модули DOCX'}).locator('.template-suggestion.recommended')
-  await expect(recommended).toContainText('Распоряжение о создании рабочей группы')
-  await recommended.getByRole('button', {name: 'Создать и открыть'}).click()
-
-  const wizard = page.getByRole('region', {name: 'Мастер рабочей группы'})
-  await expect(wizard).toContainText('Шаг 1 из 3')
-  await wizard.getByRole('button', {name: 'Да', exact: true}).click()
-  await wizard.getByRole('button', {name: 'Далее'}).click()
-
-  const template = (await (await page.request.get('/api/document-templates')).json()).find((item: {templateId: string}) => item.templateId === 'working-group-order')
-  for (const spec of template.fields.filter((item: {required: boolean}) => item.required)) {
-    const control = wizard.getByLabel(spec.label, {exact: false})
-    if (spec.inputType === 'select') await control.selectOption({index: 1})
-    else await control.fill(spec.inputType === 'date' ? '2026-12-31' : `Мастер ${spec.key}`)
+  await page.getByRole('button', {name:'Чаты', exact:true}).click()
+  await page.getByRole('textbox', {name:'Ваш запрос'}).fill('Создай распоряжение о рабочей группе')
+  await page.getByRole('button', {name:'Отправить запрос'}).click()
+  await page.getByRole('region', {name:'Модули DOCX'}).locator('.template-suggestion').filter({hasText:'Распоряжение о создании рабочей группы'}).getByRole('button', {name:'Создать в чате'}).click()
+  const form = page.getByRole('region', {name:/Форма:/})
+  await expect(form).toBeVisible()
+  for (const details of await form.locator('details').all()) await details.evaluate(e => (e as HTMLDetailsElement).open=true)
+  const template = (await page.request.get('/api/document-templates').then(r=>r.json())).find((t:{templateId:string})=>t.templateId==='working-group-order')
+  for (const spec of template.fields.filter((s:{required:boolean})=>s.required)) {
+    const control=form.getByLabel(spec.label,{exact:false})
+    await control.fill(spec.inputType==='date'?'2026-12-31':`Мастер ${spec.key}`)
   }
-  await wizard.getByRole('button', {name: 'Далее'}).click()
-  await expect(wizard).toContainText('Связь с ИТ')
-  await expect(wizard).toContainText('Да')
-  await wizard.getByRole('button', {name: 'Заполнить проект'}).click()
-
+  await form.getByRole('button',{name:'Сохранить',exact:true}).click()
+  await expect(form.getByText('Все изменения сохранены',{exact:true})).toBeVisible()
+  await form.getByRole('button',{name:'Открыть полный редактор'}).click()
   await expect(page.locator('.docs-editor-head')).toBeVisible()
-  await page.locator('.inspector-field-list [data-field-key="organization"]').click()
-  await expect(page.locator('.field-editor').getByLabel('Наименование организации', {exact: true})).toHaveValue('Мастер organization')
-  await page.getByRole('button', {name: 'Открыть в чате', exact: true}).click()
-  await expect(page.getByRole('region', {name: 'Мастер рабочей группы'})).toContainText('Реквизиты сохранены')
+  await page.getByRole('button',{name:'Открыть в чате',exact:true}).click()
+  await expect(page.getByRole('region',{name:/Форма:/}).getByLabel('Наименование организации')).toHaveValue('Мастер organization')
 })
 
 test('generation keeps later edits and downloads a real saved DOCX', async ({ page }) => {

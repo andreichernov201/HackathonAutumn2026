@@ -1,10 +1,14 @@
 import { useRef, type RefObject, type KeyboardEvent } from 'react'
 import { Check, FileText, Paperclip, Send, Sparkles, X } from 'lucide-react'
+import type { AIConfiguration } from '../features/assistant/gateway'
 import { scenarios } from '../features/assistant/scenarios'
 import type { Scenario } from '../features/assistant/types'
 import { formatFileSize } from '../shared/format'
 
 interface ComposerProps {
+  aiConfig?: AIConfiguration
+  syntheticAcknowledged?: boolean
+  onSyntheticAcknowledged?: (value: boolean) => void
   inputRef: RefObject<HTMLTextAreaElement | null>
   draft: string
   file: File | null
@@ -26,6 +30,7 @@ export function Composer({
   onFile,
   onScenario,
   onSubmit,
+  aiConfig, syntheticAcknowledged, onSyntheticAcknowledged,
 }: ComposerProps) {
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -104,6 +109,10 @@ export function Composer({
           </button>
         </div>
       </form>
+      {aiConfig && <div className="ai-engine-notice">
+        <small>{aiConfig.configured ? `${aiConfig.model} · ${aiConfig.processing === 'cloud' ? 'облачная обработка демо' : 'локальный AI-движок'}` : 'AI-движок не настроен · доступны поиск и формы'}</small>
+        {aiConfig.configured && aiConfig.processing === 'cloud' && <label><input type="checkbox" checked={syntheticAcknowledged || false} onChange={event => onSyntheticAcknowledged?.(event.target.checked)}/>Использую только разрешённые синтетические материалы. Сообщения и нужные фрагменты будут переданы DeepSeek.</label>}
+      </div>}
       <p className="composer-caption">
         <Check size={13} />
         Ответы проверяйте по оригиналам документов. Enter — отправить, Shift + Enter — новая строка.
