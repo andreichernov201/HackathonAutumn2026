@@ -1964,3 +1964,8 @@ h3 {
 .chat-request-progress{padding:4px 25px;color:#65748a;font-size:12px}
 .message-bubble:has(.document-chat-form){max-width:100%;width:100%;box-sizing:border-box}
 @media(max-width:700px){.document-chat-form{padding:12px}.chat-form-section{grid-template-columns:1fr}.chat-form-actions .ui-button{flex:1 1 44%;justify-content:center}.chat-form-preview{height:420px}.chat-form-fields summary{padding:14px 0}}
+
+.chat-operations>summary{cursor:pointer;font-size:12px;font-weight:500;color:var(--muted);line-height:1.5}
+.chat-operations>summary small{margin-left:6px}
+.chat-operations .progress-list{margin-bottom:0;line-height:1.6}
+.template-suggestions>.template-catalog-note{display:block;margin-top:12px;color:var(--muted);font-size:11px;line-height:1.5}

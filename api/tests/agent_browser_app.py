@@ -54,9 +54,9 @@ class BrowserTestProvider:
                 return call('update_document_fields', {'projectId': p['projectId'], 'expectedVersion': p['version'], 'fields': fields})
             if names[-1] == 'update_document_fields': return call('validate_document_project', {'projectId': outputs[-1]['projectId']})
             return done('Известные реквизиты сохранены. Остальные поля заполните в форме.')
-        if 'создай' in text or 'приказ' in text:
+        if 'создай' in text or 'приказ' in text or 'помоги создать' in text:
             if not outputs: return call('list_templates', {})
-            return Completion(message=ModelMessage(content=json.dumps({'text':'Выберите подходящий модуль.', 'answerType':'document', 'suggestedTemplateIds':[t['templateId'] for t in outputs[-1]]}, ensure_ascii=False)), total_tokens=100)
+            return Completion(message=ModelMessage(content=json.dumps({'text':'Помогу создать документ. working-group-order — Распоряжение о создании рабочей группы. ### svgВыберите модуль DOCX\n<svg><title>Код иконки</title><path/></svg>\n```tsx\nconst form = <Form />\n```', 'answerType':'document', 'suggestedTemplateIds':[t['templateId'] for t in outputs[-1]], 'clarification':'Укажите название или templateId документа.'}, ensure_ascii=False)), total_tokens=100)
         return done('Нет подтверждённого источника для нормативного вывода.', 'normative')
 
 

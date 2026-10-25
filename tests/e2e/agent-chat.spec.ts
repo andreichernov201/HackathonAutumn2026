@@ -123,3 +123,42 @@ test('network retry reuses the original request and never creates a duplicate pr
   await expect(page.getByRole('region',{name:/Форма:/})).toBeVisible()
   expect((await page.request.get('/api/document-projects').then(r=>r.json())).length).toBe(1)
 })
+
+test('document selection has one concise Russian answer and collapsed operation details', async ({page}) => {
+  await send(page, 'Помоги создать документ')
+  const answer = page.locator('.message-row.assistant').last()
+  await expect(answer.locator('.message-markdown')).toHaveText('Выберите документ из списка ниже. После выбора откроется форма для заполнения.')
+  await expect(answer.locator('.template-suggestion')).toHaveCount(7)
+  await expect(answer.locator('.clarification-card')).toHaveCount(0)
+  await expect(answer.locator('pre, code')).toHaveCount(0)
+  await expect(answer).not.toContainText(/templateId|working-group-order|const form|svg/)
+  await expect(answer.locator('.template-suggestion-list')).not.toContainText('Исходный синтетический DOCX')
+  const operations = answer.locator('.chat-operations')
+  await expect(operations).not.toHaveAttribute('open', '')
+  await expect(operations.locator('.progress-list')).toBeHidden()
+  await operations.locator('summary').click()
+  await expect(operations.locator('.progress-list')).toBeVisible()
+  await expect(operations).toContainText('Подбираю документ')
+})
+
+test('saved assistant replies clean markup and identifiers while user messages stay verbatim', async ({page}) => {
+  const template = (await page.request.get('/api/document-templates').then(r=>r.json()))[0]
+  const id = 'e9aacb8c-0405-48e3-8e93-f7f280269735'
+  const original = '### svgДокумент\n<svg><path/></svg>\n```tsx\nconst form = <Form />\n```\nУкажите `templateId`: working-group-order'
+  await page.evaluate(({template,id,original}) => {
+    localStorage.setItem('regula-ai-local-sessions-v1', JSON.stringify([{id,title:'Сохранённый ответ',updatedAt:new Date().toISOString(),messages:[
+      {id:crypto.randomUUID(),role:'user',text:'Поясни working-group-order и templateId',createdAt:new Date().toISOString()},
+      {id:crypto.randomUUID(),role:'assistant',text:original,createdAt:new Date().toISOString(),blocks:[{type:'template_suggestions',templates:[template]},{type:'task_progress',title:'Выполненные операции',steps:[{label:'get_template',state:'done'}]}]},
+    ]}]))
+  }, {template,id,original})
+  await page.reload()
+  await page.locator('.history-item').first().click()
+  const prose = page.locator('.message-row.assistant .message-markdown')
+  await expect(prose).toContainText('название документа')
+  await expect(prose).toContainText(template.title)
+  await expect(prose).not.toContainText(/svg|const form|templateId|working-group-order|<Form/)
+  await expect(page.locator('.message-row:not(.assistant)')).toContainText('working-group-order и templateId')
+  await page.locator('.chat-operations summary').click()
+  await expect(page.locator('.chat-operations')).toContainText('Получаю поля документа')
+  await expect(page.locator('.chat-operations')).not.toContainText('get_template')
+})

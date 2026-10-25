@@ -1,5 +1,6 @@
-import { ArrowRight, BookOpen, CheckCircle2, CircleHelp, FilePlus2, FileText, ListChecks } from 'lucide-react'
+import { ArrowRight, BookOpen } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { assistantDisplayText, progressLabel } from '../features/assistant/presentation'
 import type { ChatBlock, SourceReference } from '../features/assistant/types'
 import { documentsApi } from '../features/documents/api'
 import type { DocumentProject } from '../features/documents/types'
@@ -51,7 +52,7 @@ export function ChatBlocks({ blocks, sources, onSource, onStartDocument, onCreat
                 onSource(source.id)
               }}
             >
-              <BookOpen size={16} />
+              <BookOpen size={16} aria-hidden="true" focusable="false" />
               <span>
                 <strong>
                   {source.title} · {source.locator}
@@ -63,66 +64,53 @@ export function ChatBlocks({ blocks, sources, onSource, onStartDocument, onCreat
                     : 'Выдержка из условий кейса · оригинал не загружен'}
                 </em>
               </span>
-              <ArrowRight size={15} />
+              <ArrowRight size={15} aria-hidden="true" focusable="false" />
             </a>
           )
         }
         if (block.type === 'task_progress')
-          return (
-            <section key={index} className="result-card">
-              <h3>
-                <ListChecks size={16} />
-                {block.title}
-              </h3>
-              <ol className="progress-list">
-                {block.steps.map((step) => (
-                  <li key={step.label} className={step.state}>
-                    {step.label}
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )
+          return <details key={index} className="result-card chat-operations">
+            <summary>Действия помощника <small>{block.steps.length}</small></summary>
+            <ol className="progress-list">{block.steps.map((step, stepIndex) => <li key={stepIndex} className={step.state}>{progressLabel(step.label)}</li>)}</ol>
+          </details>
+        if (block.type === 'clarification' && !block.confirmation && blocks.some(b => b.type === 'template_suggestions')) return null
         if (block.type === 'clarification')
           return (
             <section key={index} className="result-card clarification-card">
               <h3>
-                <CircleHelp size={16} />
                 Нужно уточнить
               </h3>
-              <p>{block.question}</p>
-              {block.confirmation ? <button type="button" disabled={disabled || confirming} onClick={() => {setConfirming(true); void onConfirmAction(block.confirmation!.id).catch(() => setCreateError('Не удалось сформировать DOCX. Проверьте версию и повторите запрос.')).finally(() => setConfirming(false))}}>Подтвердить формирование DOCX</button> : block.fields.length > 0 && <button type="button" onClick={onStartDocument}>Открыть редактор <ArrowRight size={14}/></button>}
+              <p>{assistantDisplayText(block.question, blocks)}</p>
+              {block.confirmation ? <button type="button" disabled={disabled || confirming} onClick={() => {setConfirming(true); void onConfirmAction(block.confirmation!.id).catch(() => setCreateError('Не удалось сформировать DOCX. Проверьте версию и повторите запрос.')).finally(() => setConfirming(false))}}>Подтвердить формирование DOCX</button> : block.fields.length > 0 && <button type="button" onClick={onStartDocument}>Открыть редактор <ArrowRight size={14} aria-hidden="true" focusable="false"/></button>}
             </section>
           )
         if (block.type === 'document_card')
           return (
             <section key={index} className="result-card">
               <h3>
-                <FileText size={16} />
                 {block.title}
               </h3>
               <p>{block.summary}</p>
               <small>{block.status === 'draft' ? 'Черновик' : 'ожидает данные'}</small>
               <button type="button" onClick={onStartDocument}>
-                Открыть редактор <ArrowRight size={14} />
+                Открыть редактор <ArrowRight size={14} aria-hidden="true" focusable="false" />
               </button>
             </section>
           )
         if (block.type === 'template_suggestions')
           return <section key={index} className="template-suggestions" aria-label="Модули DOCX">
-            <h3><FileText size={16} />Выберите модуль DOCX</h3>
-            <p>{block.recommendedTemplateId ? 'Подходящий модуль отмечен по формулировке запроса. Можно выбрать другой из доступного каталога.' : 'В запросе не удалось однозначно определить тип. Выберите один из доступных модулей.'}</p>
+            <h3>Какой документ подготовить?</h3>
+            <p>Выберите подходящий документ. Его реквизиты можно будет заполнить здесь, в чате.</p>
             <div className="template-suggestion-list">{block.templates.map(template => <article className={`template-suggestion ${template.templateId === block.recommendedTemplateId ? 'recommended' : ''}`} key={template.templateId}>
-              <div><small>{template.templateId === block.recommendedTemplateId ? 'Рекомендуется' : template.kind}</small><strong>{template.title}</strong><span>{template.note}</span></div>
-              <button type="button" disabled={disabled || created || template.sourceStatus !== 'ready' || Boolean(creatingTemplateId)} onClick={() => void create(template.templateId)}><FilePlus2 size={14}/>{creatingTemplateId === template.templateId ? 'Создаём…' : created ? 'Проект создан' : 'Создать в чате'}</button>
+              <div><small>{template.templateId === block.recommendedTemplateId ? 'Рекомендуется' : template.kind}</small><strong>{template.title}</strong>{template.sourceStatus !== 'ready' && <span>Шаблон пока недоступен для заполнения.</span>}</div>
+              <button type="button" disabled={disabled || created || template.sourceStatus !== 'ready' || Boolean(creatingTemplateId)} onClick={() => void create(template.templateId)}>{creatingTemplateId === template.templateId ? 'Создаём…' : created ? 'Проект создан' : 'Создать в чате'}</button>
             </article>)}</div>
-            {createError && <p className="template-create-error" role="alert">{createError}</p>}
+            <small className="template-catalog-note">Учебные шаблоны. Статус утверждения в реестре не проверен.</small>
           </section>
         if (block.type === 'working_group_wizard') return <WorkingGroupWizard key={index} projectId={block.projectId} projectTitle={block.projectTitle} projectVersion={block.projectVersion} initialFields={block.fields} fieldSpecs={block.fieldSpecs} completed={block.completed} onComplete={onCompleteWorkingGroup}/>
         return (
           <section key={index} className="result-card">
             <h3>
-              <CheckCircle2 size={16} />
               Проверка:{' '}
               {block.outcome === 'pass' ? 'пройдено' : block.outcome === 'blocked' ? 'не выполнено' : 'нужна проверка'}
             </h3>
@@ -145,7 +133,7 @@ export function ChatBlocks({ blocks, sources, onSource, onStartDocument, onCreat
       ) &&
         !blocks.some((block) => block.type === 'document_card') && (
           <button className="document-next" type="button" onClick={onStartDocument}>
-            Создать проект распоряжения <ArrowRight size={14} />
+            Создать проект распоряжения <ArrowRight size={14} aria-hidden="true" focusable="false" />
           </button>
         )}
     </div>

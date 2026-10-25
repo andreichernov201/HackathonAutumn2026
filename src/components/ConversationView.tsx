@@ -5,6 +5,7 @@ import type { DocumentProject } from '../features/documents/types'
 import type { ChatSession } from '../features/assistant/types'
 import { formatFileSize, formatTime } from '../shared/format'
 import { MessageMarkdown } from './MessageMarkdown'
+import { assistantDisplayText } from '../features/assistant/presentation'
 import { ChatBlocks } from './ChatBlocks'
 
 interface Props {
@@ -44,7 +45,7 @@ export function ConversationView({ session, onSource, onStartDocument, onCreateD
               <div className="message-bubble">
                 {message.scenario && <span className="message-scenario">{scenarios[message.scenario].title}</span>}
 
-                {message.text && <MessageMarkdown text={message.text} />}
+                {message.text && <MessageMarkdown text={message.role === 'assistant' ? assistantDisplayText(message.text, message.blocks) : message.text} />}
                 {message.file && (
                   <span className="message-file">
                     <FileText size={16} />
