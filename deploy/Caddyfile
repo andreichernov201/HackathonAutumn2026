@@ -4,10 +4,6 @@
 
 {$DOMAIN} {
   encode zstd gzip
-  @passwordGate expression `{$REGULA_PUBLIC_DEMO:0} != 1`
-  basic_auth @passwordGate {
-    {$REGULA_ACCESS_USER} {$REGULA_ACCESS_HASH}
-  }
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
     X-Content-Type-Options "nosniff"

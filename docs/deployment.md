@@ -5,7 +5,7 @@
 ## Что уже защищено, а что ещё требуется
 
 - `deploy/compose.yaml` закрепляет API и web по **digest**, использует внешний именованный том для SQLite, оригиналов и DOCX, проверки готовности, `restart: unless-stopped`, ограничения памяти/CPU и ротацию Docker-логов. Приложение стартует после перезагрузки при включённом `docker.service`.
-- Production добавляет Caddy с автоматическим TLS и общей входной проверкой Basic Auth. Это временное ограничение доступа к синтетической базе и редактору до корпоративного SSO, а не удостоверение сотрудников. Передавать пароль следует только выбранным участникам. Caddy закрывает в том числе `/api/docs`; в production документация FastAPI дополнительно выключена.
+- Production добавляет Caddy с автоматическим TLS. Сайт и пользовательский API доступны без входа и пароля. В production документация FastAPI выключена; административные изменения базы знаний требуют отдельного ключа оператора.
 - Без домена production **не включать**. Staging слушает только `127.0.0.1:8080` и доступен через SSH-туннель. HTTP на публичном IP не используется. Для staging `REGULA_SECURE_COOKIE=0` допустим только потому, что HTTP проходит внутри туннеля и не выходит в публичную сеть.
 - CSRF обязателен для изменений, cookie `HttpOnly`, `SameSite=Lax`, в production `Secure`. Случайный `REGULA_SESSION_SECRET` обязателен; слабые/известные значения API отклоняет.
 
@@ -84,7 +84,7 @@ sudo docker volume create regula_caddy_config
 sudo install -o root -g root -m 0600 deploy/regula.env.example /etc/regula/regula.env
 ```
 
-Заполните `/etc/regula/regula.env` на VPS (через `sudoedit`): реальный `DOMAIN`, контактный `ACME_EMAIL`, уникальный `REGULA_ACCESS_USER`, хеш `REGULA_ACCESS_HASH`, `REGULA_SESSION_SECRET` и точные имена томов. Домен должен иметь A-запись на `171.22.130.63` до первой production-выкладки; проверьте `dig +short ваш-домен`. Пароль Basic Auth хранится у оператора, на VPS нужен только хеш: `docker run --rm -it caddy:2-alpine caddy hash-password` (ввод через локальный терминал, не в командной строке). В env-файле заключите bcrypt-хеш с символами `$` в **одинарные кавычки**, чтобы Compose не подставлял переменные. Секрет сессии создайте `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`. Для администрирования базы знаний отдельно задайте случайный `REGULA_KNOWLEDGE_ADMIN_TOKEN` или оставьте пустым, отключив изменения корпуса.
+Заполните `/etc/regula/regula.env` на VPS (через `sudoedit`): реальный `DOMAIN`, контактный `ACME_EMAIL`, `REGULA_SESSION_SECRET` и точные имена томов. Домен должен иметь A-запись на `171.22.130.63` до первой production-выкладки; проверьте `dig +short ваш-домен`. Секрет сессии создайте `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`. Для администрирования базы знаний отдельно задайте случайный `REGULA_KNOWLEDGE_ADMIN_TOKEN` или оставьте пустым, отключив изменения корпуса.
 
 Настройте права: `sudo chown root:root /etc/regula/regula.env; sudo chmod 0600 /etc/regula/regula.env`. Файл не передаётся через GitHub Actions. Сохраните секрет сессии вне VPS в защищённом хранилище: его потеря инвалидирует существующие cookie.
 
@@ -104,9 +104,17 @@ sudo install -o root -g root -m 0600 deploy/regula.env.example /etc/regula/regul
 
 ## Публичная демонстрация
 
-По умолчанию `REGULA_PUBLIC_DEMO=0`: сайт и API закрыты Basic Auth. Только по явному решению владельца для публичного показа синтетического корпуса можно установить `REGULA_PUBLIC_DEMO=1` в root-only `/etc/regula/regula.env` и выложить новый выпуск. HTTPS, Secure/HttpOnly cookies, CSRF и отключённая документация API сохраняются; `REGULA_KNOWLEDGE_ADMIN_TOKEN` оставьте пустым, чтобы запретить загрузку и изменение общего корпуса. Имя и хеш пароля сохраните для возврата в закрытый режим. При обновлении существующего VPS сначала установите обновлённый root-owned `deploy/regula-rollout`: он проверяет HTTPS и для закрытого, и для публичного выпуска.
+Сайт и пользовательский API открываются без логина и пароля. `REGULA_ACCESS_USER`, `REGULA_ACCESS_HASH` и `REGULA_PUBLIC_DEMO` больше не используются текущим выпуском. HTTPS, Secure/HttpOnly cookies, CSRF и отключённая документация API сохраняются; `REGULA_KNOWLEDGE_ADMIN_TOKEN` управляет отдельным доступом оператора к изменениям корпуса.
 
-Публичный адрес может открыть любой человек: секретность ссылки не является контролем доступа. Не загружайте реальные персональные или конфиденциальные документы. Проекты по-прежнему привязаны к подписанной сессии браузера; это demo-изоляция, не корпоративная авторизация. Для возврата к ограниченному доступу задайте `REGULA_PUBLIC_DEMO=0` и пересоздайте Caddy с текущими env-параметрами. Откат к старому выпуску без этого переключателя возвращает парольный шлюз.
+При обновлении существующего VPS **до выкладки** установите обновлённый root-owned скрипт из проверенного checkout:
+
+```sh
+sudo install -o root -g root -m 0755 deploy/regula-rollout /usr/local/sbin/regula-rollout
+```
+
+Он ожидает HTTP 200 от публичного `/api/health` и распознаёт парольную проверку старых выпусков при откате. Старый установленный скрипт может ожидать 401 и откатить публичный выпуск как неготовый. Новый Caddyfile применяется при выкладке выпуска и пересоздании контейнера Caddy. Существующие переменные входа можно удалить из `/etc/regula/regula.env`, если откат к старым выпускам больше не нужен; старые выпуски могут требовать эти значения.
+
+Проекты по-прежнему привязаны к подписанной сессии браузера, которая создаётся автоматически. Это demo-изоляция, не корпоративная авторизация. Откат к старому выпуску может вернуть парольную проверку.
 
 ## 5. Staging без домена
 
@@ -121,7 +129,7 @@ sudo docker compose --env-file /etc/regula/staging.env --env-file ./images.env \
 
 ## 6. Откат, резервные копии и восстановление
 
-При неуспехе проверки контейнеров или TLS скрипт пытается вернуть предыдущий digest и завершает job ошибкой. Ручной быстрый откат: `sudo /usr/local/sbin/regula-rollout rollback`. Текущий/предыдущий SHA и выпуск с digest лежат в `/opt/regula/current.sha`, `previous.sha`, `releases/<sha>/images.env`. Образы предыдущего выпуска не удаляются. После отката проверьте `docker compose ps` и `curl -I https://ваш-домен/` (до входа ожидается 401). Откат образов **не откатывает схему БД**; перед несовместимой миграцией обязателен проверенный бэкап.
+При неуспехе проверки контейнеров или TLS скрипт пытается вернуть предыдущий digest и завершает job ошибкой. Ручной быстрый откат: `sudo /usr/local/sbin/regula-rollout rollback`. Текущий/предыдущий SHA и выпуск с digest лежат в `/opt/regula/current.sha`, `previous.sha`, `releases/<sha>/images.env`. Образы предыдущего выпуска не удаляются. После отката проверьте `docker compose ps` и `curl -I https://ваш-домен/` (для текущего публичного выпуска ожидается 200; старые закрытые выпуски могут вернуть 401). Откат образов **не откатывает схему БД**; перед несовместимой миграцией обязателен проверенный бэкап.
 
 `regula-backup` останавливает web/API, делает SQLite backup API и архивирует все остальные файлы тома, включая исходные PDF/DOCX и сгенерированные артефакты; затем распаковывает копию и проверяет `PRAGMA integrity_check`. Запуск вручную: `sudo /usr/local/sbin/regula-backup`. Для ежедневного запуска:
 
@@ -139,6 +147,6 @@ systemctl list-timers regula-backup.timer
 
 ## 7. Диагностика и будущая Qwen
 
-`sudo systemctl status docker`, `sudo docker compose --project-directory /opt/regula/releases/$(cat /opt/regula/current.sha) --env-file /etc/regula/regula.env --env-file /opt/regula/releases/$(cat /opt/regula/current.sha)/images.env -f /opt/regula/releases/$(cat /opt/regula/current.sha)/compose.yaml -f /opt/regula/releases/$(cat /opt/regula/current.sha)/compose.production.yaml ps`, `sudo journalctl -u regula-backup.service` и логи нужного контейнера через `docker logs` помогают найти сбой. `/api/health` сообщает только статус; `/api/ready` проверяет доступность БД. Без Basic Auth оба маршрута снаружи возвращают 401. На локальном CI стенде `scripts/compose-smoke.py` проверяет HTTP, поиск п. 2.1/матрицы, 7 DOCX, 20 MiB файл и границы запроса в отдельном томе.
+`sudo systemctl status docker`, `sudo docker compose --project-directory /opt/regula/releases/$(cat /opt/regula/current.sha) --env-file /etc/regula/regula.env --env-file /opt/regula/releases/$(cat /opt/regula/current.sha)/images.env -f /opt/regula/releases/$(cat /opt/regula/current.sha)/compose.yaml -f /opt/regula/releases/$(cat /opt/regula/current.sha)/compose.production.yaml ps`, `sudo journalctl -u regula-backup.service` и логи нужного контейнера через `docker logs` помогают найти сбой. `/api/health` сообщает только статус; `/api/ready` проверяет доступность БД. Оба маршрута доступны снаружи без пароля и при готовом приложении возвращают 200. На локальном CI стенде `scripts/compose-smoke.py` проверяет HTTP, поиск п. 2.1/матрицы, 7 DOCX, 20 MiB файл и границы запроса в отдельном томе.
 
 Домашний Windows+WSL2 RTX 4090 может в будущем поднять Qwen **только на Tailscale-адресе**, с исходящим соединением VPS по tailnet; публичные 8000/Ollama/vLLM порты не нужны. Зарезервированы `REGULA_QWEN_URL` и `REGULA_QWEN_TIMEOUT_SECONDS=8`. Сейчас модель не подключена: FTS, документы и сайт работают автономно, чат ясно сообщает отсутствие AI-анализа. При добавлении адаптера он должен использовать короткий timeout, отказ без блокировки FastAPI и не выполнять документные инструменты после сетевой ошибки. Настройка домашнего ПК и включение модели — отдельное действие после получения доступа.

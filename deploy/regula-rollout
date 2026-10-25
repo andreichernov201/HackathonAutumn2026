@@ -50,9 +50,13 @@ ASKPASS
   done
 )
 check_https() {
-  local domain code expected=401 public_demo
-  public_demo=$(sed -n 's/^REGULA_PUBLIC_DEMO=//p' "$CONFIG" | tail -1)
-  if [[ $public_demo == 1 ]] && grep -q REGULA_PUBLIC_DEMO "$ROOT/releases/$1/Caddyfile"; then expected=200; fi
+  local domain code expected=200 public_demo
+  # Older releases may still require a password when rolling back.
+  if grep -q '^[[:space:]]*basic_auth' "$ROOT/releases/$1/Caddyfile"; then
+    expected=401
+    public_demo=$(sed -n 's/^REGULA_PUBLIC_DEMO=//p' "$CONFIG" | tail -1)
+    if [[ $public_demo == 1 ]] && grep -q REGULA_PUBLIC_DEMO "$ROOT/releases/$1/Caddyfile"; then expected=200; fi
+  fi
   domain=$(sed -n 's/^DOMAIN=//p' "$CONFIG" | tail -1)
   [[ $domain =~ ^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$ ]] || return 1
   for _ in {1..18}; do

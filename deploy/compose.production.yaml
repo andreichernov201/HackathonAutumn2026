@@ -6,10 +6,7 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:?set a real domain}
-      REGULA_ACCESS_USER: ${REGULA_ACCESS_USER:?required}
-      REGULA_ACCESS_HASH: ${REGULA_ACCESS_HASH:?required}
       ACME_EMAIL: ${ACME_EMAIL:?required}
-      REGULA_PUBLIC_DEMO: ${REGULA_PUBLIC_DEMO:-0}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
